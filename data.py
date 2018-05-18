@@ -67,7 +67,13 @@ def get_test_set(original_size,shrunk_size):
 	get_image(imgs[0],original_size)
 	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size)) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
 	y = [get_image(q,original_size) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size] for q in imgs]
-	return x,y
+
+	bicubic = [scipy.misc.imresize(get_image(q,shrunk_size),(original_size,original_size),'bicubic') for q in imgs]
+
+	return x,y,bicubic
+
+
+
 
 def get_image(imgtuple,size):
 	img = scipy.misc.imread(imgtuple[0])
@@ -103,10 +109,14 @@ def get_batch(batch_size,original_size,shrunk_size):
 	counter = batch_index % max_counter
 	window = [x for x in range(counter*batch_size,(counter+1)*batch_size)]
 	imgs = [train_set[q] for q in window]
-	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size)) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
+	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size),'bicubic') for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
+
 	y = [get_image(q,original_size) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size] for q in imgs]
+
+	bicubic = [scipy.misc.imresize(get_image(q,shrunk_size),(original_size,original_size),'bicubic') for q in imgs]
+
 	batch_index = (batch_index+1)%max_counter
-	return x,y
+	return x,y,bicubic
 
 """
 Simple method to crop center of image

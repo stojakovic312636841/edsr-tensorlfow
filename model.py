@@ -28,7 +28,10 @@ class EDSR(object):
 		self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
 		#Placeholder for upscaled image ground-truth
 		self.target = y = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
-	
+		#Placeholder for upscaled image bicubic from LR
+		self.bicubic = bicubic = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])	
+
+
 		"""
 		Preprocessing as mentioned in the paper, by subtracting the mean
 		However, the subtract the mean of the entire dataset they use. As of
@@ -39,6 +42,8 @@ class EDSR(object):
 		image_input =x- mean_x
 		mean_y = 127#tf.reduce_mean(self.target)
 		image_target =y- mean_y
+
+		image_bicubic = bicubic - mean_x
 		'''
 		input_mean = tf.reduce_mean(self.input, 2, keep_dims = True)
 		input_mean = tf.reduce_mean(self.input, 1, keep_dims = True)
@@ -101,9 +106,9 @@ class EDSR(object):
 		#Upsample output of the convolution		
 		x = utils.upsample(x,scale,feature_size,None)
 		
-		#x = x * 255.0
 		#One final convolution on the upsampling output
-		output = x#slim.conv2d(x,output_channels,[3,3])
+		#output = x	#slim.conv2d(x,output_channels,[3,3])
+		output = image_bicubic + x
 		self.out = tf.clip_by_value(output+mean_x,0.0,255.0)
 		#self.out = tf.clip_by_value(output+target_mean,0.0,255.0)
 
@@ -166,21 +171,36 @@ class EDSR(object):
 			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
 			for i in range(num_across):
 				for j in range(num_down):
+					bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
+					bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})[0]
-					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp + bicubic
+					#tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+
 			#this added section fixes bottom right corner when testing
 			if (x.shape[0]%self.img_size != 0 and  x.shape[1]%self.img_size != 0):
+				bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
+				bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
 				tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]]})[0]
-				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp
+				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp + bicubic					
+				#tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp
 					
 			if x.shape[0]%self.img_size != 0:
 				for j in range(num_down):
+					bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
+					bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})[0]
-					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+					#tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp + bicubic
+
 			if x.shape[1]%self.img_size != 0:
 				for j in range(num_across):
-                                        tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
-                                        tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
+					bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
+					bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
+					tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
+					#tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
+					tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp + bicubic
+			
 			return tmp_image
 		else:
 			return self.sess.run(self.out,feed_dict={self.input:x})
@@ -222,17 +242,20 @@ class EDSR(object):
 			#If we're using a test set, include another summary writer for that
 			if test_exists:
 				test_writer = tf.summary.FileWriter(save_dir+"/test",sess.graph)
-				test_x,test_y = self.test_data(*self.test_args)
-				test_feed = {self.input:test_x,self.target:test_y}
+				#test_x,test_y = self.test_data(*self.test_args)
+				test_x,test_y,test_bicubic = self.test_data(*self.test_args)
+				#test_feed = {self.input:test_x,self.target:test_y}
+				test_feed = {self.input:test_x,self.target:test_y, self.bicubic:test_bicubic}
 
 			#This is our training loop
 			for i in tqdm(range(iterations)):
 				#Use the data function we were passed to get a batch every iteration
-				x,y = self.data(*self.args)
+				x,y,bicubic = self.data(*self.args)
 				#Create feed dictionary for the batch
 				feed = {
 					self.input:x,
-					self.target:y
+					self.target:y,
+					self.bicubic:bicubic
 				}
 				#Run the train op and calculate the train summary
 				summary,_ = sess.run([merged,train_op],feed)

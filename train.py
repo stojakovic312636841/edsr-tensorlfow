@@ -21,6 +21,8 @@ print('load dataset complit...')
 down_size = args.imgsize//args.scale
 
 network = EDSR(down_size,args.layers,args.featuresize,args.scale)
+
+#put the data into the batch ,4 argments
 network.set_data_fn(data.get_batch,(args.batchsize,args.imgsize,down_size),data.get_test_set,(args.imgsize,down_size))
 
 network.train(args.iterations,args.savedir)
