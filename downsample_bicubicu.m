@@ -32,6 +32,8 @@ for f_iter = 1:numel(f_lst)
     img_3 = imresize(img_raw,1/3,'bicubic');
     img_4 = imresize(img_raw,1/4,'bicubic');   
     
+	bicubic = imresize(imresize(img_raw,1/2,'bicubic'),[img_size(1),img_size(2)],'bicubic');
+
     file_name = regexp(f_info.name, '.jpg', 'split');
     file_name = file_name{1};
     
@@ -39,5 +41,6 @@ for f_iter = 1:numel(f_lst)
     img_name = sprintf('LR_bicubicu/%s',file_name);
     imwrite(img_2, sprintf('%s_LRx2.png', img_name));
     imwrite(img_3, sprintf('%s_LRx3.png', img_name));
-    imwrite(img_4, sprintf('%s_LRx4.png', img_name));;
+    imwrite(img_4, sprintf('%s_LRx4.png', img_name));
+	imwrite(bicubic, sprintf('%s_bicubic.png', img_name));;
 end

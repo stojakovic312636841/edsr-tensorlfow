@@ -162,7 +162,7 @@ class EDSR(object):
 
 	return  	For the second case, we return a numpy array of shape [n,input_size*scale,input_size*scale,3]
 	"""
-	def predict(self,x):
+	def predict(self,x, bic):
 		print("Predicting...")
 
 		if (len(x.shape) == 3) and not(x.shape[0] == self.img_size and x.shape[1] == self.img_size):
@@ -171,33 +171,33 @@ class EDSR(object):
 			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
 			for i in range(num_across):
 				for j in range(num_down):
-					bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
-					bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
-					tmp = self.sess.run(self.out,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})[0]
+					bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]					
+
+					tmp = self.sess.run(self.out,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]],self.bicubic:[bicubic]})[0]
 					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp + bicubic
 					#tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
 
 			#this added section fixes bottom right corner when testing
 			if (x.shape[0]%self.img_size != 0 and  x.shape[1]%self.img_size != 0):
-				bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
-				bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
-				tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]]})[0]
+				bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]
+
+				tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]],self.bicubic:[bicubic]})[0]
 				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp + bicubic					
 				#tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp
 					
 			if x.shape[0]%self.img_size != 0:
 				for j in range(num_down):
-					bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
-					bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
-					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})[0]
+					bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]
+
+					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]],self.bicubic:[bicubic]})[0]
 					#tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
 					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp + bicubic
 
 			if x.shape[1]%self.img_size != 0:
 				for j in range(num_across):
-					bicubic = x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]
-					bicubic = scipy.misc.imresize(bicubic, (x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
-					tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
+					bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]
+
+					tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]],self.bicubic:[bicubic]})[0]
 					#tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
 					tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp + bicubic
 			
