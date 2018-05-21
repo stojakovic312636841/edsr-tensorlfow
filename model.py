@@ -141,6 +141,10 @@ class EDSR(object):
 		self.saver.save(self.sess,savedir+"/model")
 		print("Saved!")
 		
+	
+
+
+
 	"""
 	Resume network from previously saved weights
 	"""
@@ -148,6 +152,11 @@ class EDSR(object):
 		print("Restoring...")
 		self.saver.restore(self.sess,tf.train.latest_checkpoint(savedir))
 		print("Restored!")	
+
+	
+
+
+
 
 	"""
 	Compute the output of this network given a specific input
@@ -179,7 +188,7 @@ class EDSR(object):
 
 			#this added section fixes bottom right corner when testing
 			if (x.shape[0]%self.img_size != 0 and  x.shape[1]%self.img_size != 0):
-				bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]
+				bicubic = bic[-1*self.img_size *self.scale :,-1*self.img_size * self.scale:]
 
 				tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]],self.bicubic:[bicubic]})[0]
 				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp + bicubic					
@@ -187,7 +196,7 @@ class EDSR(object):
 					
 			if x.shape[0]%self.img_size != 0:
 				for j in range(num_down):
-					bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]
+					bicubic = bic[-1*self.img_size * self.scale:,j*self.img_size * self.scale:(j+1)*self.img_size * self.scale]
 
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]],self.bicubic:[bicubic]})[0]
 					#tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
@@ -195,7 +204,7 @@ class EDSR(object):
 
 			if x.shape[1]%self.img_size != 0:
 				for j in range(num_across):
-					bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]
+					bicubic = bic[j*self.img_size * self.scale:(j+1)*self.img_size * self.scale,-1*self.img_size * self.scale:]
 
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]],self.bicubic:[bicubic]})[0]
 					#tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
@@ -217,7 +226,7 @@ class EDSR(object):
 	"""
 	Train the neural network
 	"""
-	def train(self,iterations=1000,save_dir="saved_models"):
+	def train(self,iterations=1000,save_dir="saved_models",learn_rate = 0.001):
 		#Removing previous save directory if there is one
 		if os.path.exists(save_dir):
 			shutil.rmtree(save_dir)
@@ -226,7 +235,7 @@ class EDSR(object):
 		#Just a tf thing, to merge all summaries into one
 		merged = tf.summary.merge_all()
 		#Using adam optimizer as mentioned in the paper
-		optimizer = tf.train.AdamOptimizer()
+		optimizer = tf.train.AdamOptimizer(learning_rate = learn_rate)
 		#This is the train operation for our objective
 		train_op = optimizer.minimize(self.loss)	
 		#Operation to initialize all variables
