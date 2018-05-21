@@ -18,9 +18,11 @@ parser.add_argument("--numimgs",default=5,type=int)
 parser.add_argument("--outdir",default="out")
 parser.add_argument("--image")
 parser.add_argument("--bicubic")
+
 args = parser.parse_args()
 if not os.path.exists(args.outdir):
 	os.mkdir(args.outdir)
+
 down_size = args.imgsize//args.scale
 network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale)
 network.resume(args.savedir)

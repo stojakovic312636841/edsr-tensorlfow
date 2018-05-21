@@ -93,7 +93,8 @@ class EDSR(object):
 		convolution layer for the computational efficiency.'
 
 		"""
-		scaling_factor = 0.1
+		#scaling_factor = 0.1
+		scaling_factor = 1.0
 		
 		#Add the residual blocks to the model
 		for i in range(num_layers):
