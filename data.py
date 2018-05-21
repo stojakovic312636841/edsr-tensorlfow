@@ -121,6 +121,10 @@ def get_batch(batch_size,original_size,shrunk_size):
 	counter = batch_index % max_counter
 	window = [x for x in range(counter*batch_size,(counter+1)*batch_size)]
 	imgs = [train_set[q] for q in window]
+
+	#shuffle the images in the mini-batch
+	random.shuffle(imgs)
+
 	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size),'bicubic') for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
 
 	y = [get_image(q,original_size) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size] for q in imgs]

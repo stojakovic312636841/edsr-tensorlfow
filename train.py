@@ -12,7 +12,7 @@ parser.add_argument("--featuresize",default=256,type=int)
 parser.add_argument("--batchsize",default=16,type=int)  #10
 parser.add_argument("--savedir",default='saved_models')
 parser.add_argument("--iterations",default=1000,type=int)
-parser.add_argument("--lr",default=0.001,type=float)
+parser.add_argument("--lr",default=0.0001,type=float)
 parser.add_argument("--load_model",default='',type=str)
 
 args = parser.parse_args()
@@ -24,12 +24,14 @@ down_size = args.imgsize//args.scale
 
 network = EDSR(down_size,args.layers,args.featuresize,args.scale)
 
+'''
 #if we want to refine the EDSR model, we restore the pre-train model
 if args.load_model != '':
 	print('get pre-train model ...\r\n')
 	network.resume(args.load_model)
+'''
 
 #put the data into the batch ,4 argments
 network.set_data_fn(data.get_batch,(args.batchsize,args.imgsize,down_size),data.get_test_set,(args.imgsize,down_size))
 
-network.train(args.iterations, args.savedir, args.lr)
+network.train(args.iterations, args.savedir, args.lr, args.load_model)

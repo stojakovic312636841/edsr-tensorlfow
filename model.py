@@ -94,7 +94,7 @@ class EDSR(object):
 
 		"""
 		#scaling_factor = 0.1
-		scaling_factor = 1.0
+		scaling_factor = 0.5
 		
 		#Add the residual blocks to the model
 		for i in range(num_layers):
@@ -227,12 +227,19 @@ class EDSR(object):
 	"""
 	Train the neural network
 	"""
-	def train(self,iterations=1000,save_dir="saved_models",learn_rate = 0.001):
+	def train(self,iterations=1000,save_dir="saved_models",learn_rate = 0.001, pre_train_model =''):
 		#Removing previous save directory if there is one
-		if os.path.exists(save_dir):
-			shutil.rmtree(save_dir)
-		#Make new save directory
-		os.mkdir(save_dir)
+		if pre_train_model == '':		
+			if os.path.exists(save_dir):
+				shutil.rmtree(save_dir)
+			#Make new save directory
+			os.mkdir(save_dir)
+		else:
+			if os.path.exists(save_dir+'/test'):
+				shutil.rmtree(save_dir+'/test')
+				shutil.rmtree(save_dir+'/train')
+				print('old scalars has been delted')
+
 		#Just a tf thing, to merge all summaries into one
 		merged = tf.summary.merge_all()
 		#Using adam optimizer as mentioned in the paper
@@ -248,6 +255,11 @@ class EDSR(object):
 			test_exists = self.test_data
 			#create summary writer for train
 			train_writer = tf.summary.FileWriter(save_dir+"/train",sess.graph)
+
+			#if we want to refine the EDSR model, we restore the pre-train model
+			if pre_train_model != '':
+				print('get pre-train model ...\r\n')
+				self.resume(pre_train_model)
 
 			#If we're using a test set, include another summary writer for that
 			if test_exists:
@@ -277,5 +289,6 @@ class EDSR(object):
 				#Write train summary for this step
 				train_writer.add_summary(summary,i)
 
-				#Save our trained model		
-				self.save()		
+				#Save our trained model
+				if (i+1) % 10 == 0 :		
+					self.save()		

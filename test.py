@@ -31,14 +31,21 @@ network.resume(args.savedir)
 if args.image:
 	start_time = time.time()
 	x = scipy.misc.imread(args.image)	
-	bicubic = scipy.misc.imread(args.bicubic)
+	
+	#bicubic = scipy.misc.imread(args.bicubic)
+	bicubic = scipy.misc.imresize(x,(x.shape[0]*args.scale,x.shape[1]*args.scale),'bicubic')
 	print(x.shape,bicubic.shape)
 
 else:
 	print("No image argument given")
+
+
 inputs = x
 outputs = network.predict(x,bicubic)
 print('time --> %.4f'%(time.time()-start_time))
+
+#save the result image
 if args.image:
 	scipy.misc.imsave(args.outdir+"/input_"+'x'+str(args.scale)+'.jpg',inputs)
 	scipy.misc.imsave(args.outdir+"/output_"+'x'+str(args.scale)+'.jpg',outputs)
+
