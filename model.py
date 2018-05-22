@@ -18,7 +18,7 @@ super-resolution of images as described in:
 """
 class EDSR(object):
 
-	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3):
+	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3,sc_factor=0.5):
 		print("Building EDSR...")
 		self.img_size = img_size
 		self.scale = scale
@@ -94,7 +94,8 @@ class EDSR(object):
 
 		"""
 		#scaling_factor = 0.1
-		scaling_factor = 0.5
+		scaling_factor = sc_factor
+		print('scaling_factor = %f'%(scaling_factor))
 		
 		#Add the residual blocks to the model
 		for i in range(num_layers):
@@ -234,11 +235,12 @@ class EDSR(object):
 				shutil.rmtree(save_dir)
 			#Make new save directory
 			os.mkdir(save_dir)
+			print('the model is new!')
 		else:
 			if os.path.exists(save_dir+'/test'):
 				shutil.rmtree(save_dir+'/test')
 				shutil.rmtree(save_dir+'/train')
-				print('old scalars has been delted')
+				print('old scalars has been delted and restore model is going on')
 
 		#Just a tf thing, to merge all summaries into one
 		merged = tf.summary.merge_all()

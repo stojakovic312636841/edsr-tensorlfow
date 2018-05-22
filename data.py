@@ -1,7 +1,7 @@
 import scipy.misc
 import random
 import numpy as np
-import os
+import os,time
 from PIL import Image
 
 train_set = []
@@ -30,6 +30,7 @@ def load_dataset(data_dir, img_size):
 	global test_set
 	imgs = []
 	img_files = os.listdir(data_dir)
+	load_time = time.time()
 	for img in img_files:
 		try:
 			tmp= scipy.misc.imread(data_dir+"/"+img)
@@ -41,11 +42,19 @@ def load_dataset(data_dir, img_size):
 				imgs.append((data_dir+"/"+img,coord))
 		except:
 			print "oops"
-	test_size = min(10,int( len(imgs)*0.2))
+	test_size = min(50,int( len(imgs)*0.2))
+
 	random.shuffle(imgs)
 	test_set = imgs[:test_size]
-	train_set = imgs[test_size:][:200]
+	train_set = imgs[test_size:]#[:200]
+
+	print('image length = %d'%(len(imgs)))
+	print('train_set length = %d'%(len(train_set)))
+	print('test_set length = %d'%(len(test_set)))
+	print('loading time cost time is %f'%(time.time()-load_time))
 	return
+
+
 
 """
 Get test set from the loaded dataset
@@ -163,6 +172,8 @@ def crop_center(img,cropx,cropy):
 	return img[starty:starty+cropy,startx:startx+cropx]
 
 
+def shuffle_train_set():
+	return random.shuffle(train_set)
 
 
 

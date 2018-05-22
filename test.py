@@ -12,7 +12,7 @@ parser.add_argument("--scale",default=2,type=int)
 parser.add_argument("--layers",default=32,type=int)
 parser.add_argument("--featuresize",default=256,type=int)
 parser.add_argument("--batchsize",default=10,type=int)
-parser.add_argument("--savedir",default="saved_models")
+parser.add_argument("--load_model",default="saved_models")
 parser.add_argument("--iterations",default=1000,type=int)
 parser.add_argument("--numimgs",default=5,type=int)
 parser.add_argument("--outdir",default="out")
@@ -25,7 +25,7 @@ if not os.path.exists(args.outdir):
 
 down_size = args.imgsize//args.scale
 network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale)
-network.resume(args.savedir)
+network.resume(args.load_model)
 
 
 if args.image:
