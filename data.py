@@ -8,6 +8,16 @@ train_set = []
 test_set = []
 batch_index = 0
 
+
+def image_arugment(tmp, img_size, img_list, data_dir, img):
+	x,y,z = tmp.shape
+	coords_x = x / img_size
+	coords_y = y/img_size
+	coords = [ (q,r) for q in range(coords_x) for r in range(coords_y) ]
+	for coord in coords:
+		img_list.append((data_dir+"/"+img,coord))	
+
+
 """
 Load set of images in a directory.
 This will automatically allocate a 
@@ -33,16 +43,53 @@ def load_dataset(data_dir, img_size):
 	load_time = time.time()
 	for img in img_files:
 		try:
+			#read the image			
 			tmp= scipy.misc.imread(data_dir+"/"+img)
+			#normal image
+			image_arugment(tmp, img_size, imgs, data_dir, img)
+			
+			#rotate 90
+			image = Image.fromarray(tmp)
+			out = image.rotate(90)
+			out = np.asarray(out)			
+			image_arugment(out, img_size, imgs, data_dir, img)
+			
+			
+			#rotate 180
+			image = Image.fromarray(tmp)
+			out = image.rotate(180)
+			out = np.asarray(out)			
+			image_arugment(out, img_size, imgs, data_dir, img)
+			
+			#rotate 270
+			image = Image.fromarray(tmp)
+			out = image.rotate(270)
+			out = np.asarray(out)			
+			image_arugment(out, img_size, imgs, data_dir, img)
+			
+			#flip left to right
+			image = Image.fromarray(tmp)
+			out = image.transpose(Image.FLIP_LEFT_RIGHT)
+			out = np.asarray(out)			
+			image_arugment(out, img_size, imgs, data_dir, img)
+
+			#flip top to bottom
+			image = Image.fromarray(tmp)
+			out = image.transpose(Image.FLIP_TOP_BOTTOM)
+			out = np.asarray(out)			
+			image_arugment(out, img_size, imgs, data_dir, img)			
+			
+			'''
 			x,y,z = tmp.shape
 			coords_x = x / img_size
 			coords_y = y/img_size
 			coords = [ (q,r) for q in range(coords_x) for r in range(coords_y) ]
 			for coord in coords:
 				imgs.append((data_dir+"/"+img,coord))
+			'''
 		except:
 			print "oops"
-	test_size = min(50,int( len(imgs)*0.2))
+	test_size = min(200,int( len(imgs)*0.2))
 
 	random.shuffle(imgs)
 	test_set = imgs[:test_size]
@@ -173,7 +220,9 @@ def crop_center(img,cropx,cropy):
 
 
 def shuffle_train_set():
-	return random.shuffle(train_set)
+	#print('train_set has been random shuffle')
+	random.shuffle(train_set)
+	return 
 
 
 

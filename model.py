@@ -6,6 +6,7 @@ import numpy as np
 import shutil
 import utils
 import os
+from data import shuffle_train_set
 
 """
 An implementation of the neural network used for
@@ -273,6 +274,9 @@ class EDSR(object):
 
 			#This is our training loop
 			for i in tqdm(range(iterations)):
+				#shuffle the train data set
+				shuffle_train_set()
+
 				#Use the data function we were passed to get a batch every iteration
 				x,y,bicubic = self.data(*self.args)
 				#Create feed dictionary for the batch
@@ -292,5 +296,5 @@ class EDSR(object):
 				train_writer.add_summary(summary,i)
 
 				#Save our trained model
-				if (i+1) % 10 == 0 :		
+				if (i+1) % 50 == 0 :		
 					self.save()		
