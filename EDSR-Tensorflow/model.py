@@ -183,7 +183,11 @@ class EDSR(object):
 	"""
 	Train the neural network
 	"""
-	def train(self,iterations=1000,save_dir="saved_models"):
+	def train(self,iterations=1000,save_dir="saved_models",pre_train_model ='',  step_in_epoch = 0):
+		if 	step_in_epoch == 0:
+			print('step_in_epoch in the train() has problem...and sys is break')
+			os._exit(0)
+
 		#Removing previous save directory if there is one
 		if os.path.exists(save_dir):
 			shutil.rmtree(save_dir)
@@ -193,8 +197,11 @@ class EDSR(object):
 		merged = tf.summary.merge_all()
 		#Using adam optimizer as mentioned in the paper
 		optimizer = tf.train.AdamOptimizer()
+
 		#This is the train operation for our objective
-		train_op = optimizer.minimize(self.loss)	
+		train_op = optimizer.minimize(self.loss)
+		print('the optimizer ONLY one GPU mode')	
+			
 		#Operation to initialize all variables
 		init = tf.global_variables_initializer()
 		print("Begin training...")
@@ -205,14 +212,20 @@ class EDSR(object):
 			#create summary writer for train
 			train_writer = tf.summary.FileWriter(save_dir+"/train",sess.graph)
 
+			#if we want to refine the EDSR model, we restore the pre-train model
+			if pre_train_model != '':
+				print('get pre-train model ...\r\n')
+				self.resume(pre_train_model)
+
 			#If we're using a test set, include another summary writer for that
 			if test_exists:
 				test_writer = tf.summary.FileWriter(save_dir+"/test",sess.graph)
 				test_x,test_y = self.test_data(*self.test_args)
 				test_feed = {self.input:test_x,self.target:test_y}
 
-			#This is our training loop
-			for i in tqdm(range(iterations)):
+			#This is our training loop, the loop is the batch data.NOT epoch
+			print('total step is %d, and each epoch has %d step , epoch is %d'%(iterations*step_in_epoch, step_in_epoch, iterations))
+			for i in tqdm(range(iterations*step_in_epoch)):
 				#Use the data function we were passed to get a batch every iteration
 				x,y = self.data(*self.args)
 				#Create feed dictionary for the batch
@@ -229,5 +242,7 @@ class EDSR(object):
 					test_writer.add_summary(t_summary,i)
 				#Write train summary for this step
 				train_writer.add_summary(summary,i)
-			#Save our trained model		
-			self.save()		
+				
+				#Save our trained model
+				if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
+					self.save()		
