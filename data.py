@@ -7,6 +7,7 @@ from PIL import Image
 train_set = []
 test_set = []
 batch_index = 0
+epoch_index = 0
 
 
 def image_arugment(tmp, img_size, img_list, data_dir, img):
@@ -25,7 +26,7 @@ random 20% of the images as a test set
 
 data_dir: path to directory containing images
 """
-def load_dataset(data_dir, img_size):
+def load_dataset(data_dir, img_size,batch_size):
 	"""img_files = os.listdir(data_dir)
 	test_size = int(len(img_files)*0.2)
 	test_indices = random.sample(range(len(img_files)),test_size)
@@ -95,11 +96,14 @@ def load_dataset(data_dir, img_size):
 	test_set = imgs[:test_size]
 	train_set = imgs[test_size:]#[:200]
 
+	one_epoch_step = len(train_set)/batch_size
 	print('image length = %d'%(len(imgs)))
 	print('train_set length = %d'%(len(train_set)))
 	print('test_set length = %d'%(len(test_set)))
 	print('loading time cost time is %f'%(time.time()-load_time))
-	return
+	print('one epoch has %d iterations'%(one_epoch_step))
+	
+	return one_epoch_step
 
 
 
@@ -164,6 +168,7 @@ returns x,y where:
 """
 def get_batch(batch_size,original_size,shrunk_size):
 	global batch_index
+	global epoch_index
 	"""img_indices = random.sample(range(len(train_set)),batch_size)
 	for i in range(len(img_indices)):
 		index = img_indices[i]
@@ -199,9 +204,15 @@ def get_batch(batch_size,original_size,shrunk_size):
 		#print(temp.shape,bicubic_.shape)
 		bicubic.append(bicubic_)
 	#os._exit(0)
-	
+
+	#when run a epoch, the train_data has to be shuffled	
+	if batch_index == max_counter-1:
+		shuffle_train_set()
+		epoch_index = epoch_index+1
+		print('train_set has been random shuffle, and epoch %d is start'%(epoch_index))
 	
 	batch_index = (batch_index+1)%max_counter
+	#print('batch_inded = %d,max_counter=%d'%(batch_index,max_counter))
 	return x,y,bicubic
 
 """

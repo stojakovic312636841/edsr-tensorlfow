@@ -115,6 +115,7 @@ class EDSR(object):
 		self.out = tf.clip_by_value(output+mean_x,0.0,255.0)
 		#self.out = tf.clip_by_value(output+target_mean,0.0,255.0)
 
+		#l1-loss
 		self.loss = loss = tf.reduce_mean(tf.losses.absolute_difference(image_target,output))
 	
 		#Calculating Peak Signal-to-noise-ratio
@@ -229,7 +230,11 @@ class EDSR(object):
 	"""
 	Train the neural network
 	"""
-	def train(self,iterations=1000,save_dir="saved_models",learn_rate = 0.001, pre_train_model =''):
+	def train(self,iterations=1000,save_dir="saved_models",learn_rate = 0.001, pre_train_model ='', step_in_epoch = 0):
+		if 	step_in_epoch == 0:
+			print('step_in_epoch in the train() has problem...and sys is break')
+			os._exit(0)
+
 		#Removing previous save directory if there is one
 		if pre_train_model == '':		
 			if os.path.exists(save_dir):
@@ -272,11 +277,9 @@ class EDSR(object):
 				#test_feed = {self.input:test_x,self.target:test_y}
 				test_feed = {self.input:test_x,self.target:test_y, self.bicubic:test_bicubic}
 
-			#This is our training loop
-			for i in tqdm(range(iterations)):
-				#shuffle the train data set
-				shuffle_train_set()
-
+			#This is our training loop, the loop is the batch data.NOT epoch
+			print('total step is %d, and each epoch has %d step , epoch is %d'%(iterations*step_in_epoch, step_in_epoch, iterations))
+			for i in tqdm(range(iterations*step_in_epoch)):
 				#Use the data function we were passed to get a batch every iteration
 				x,y,bicubic = self.data(*self.args)
 				#Create feed dictionary for the batch
@@ -296,5 +299,5 @@ class EDSR(object):
 				train_writer.add_summary(summary,i)
 
 				#Save our trained model
-				if (i+1) % 50 == 0 :		
+				if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
 					self.save()		
