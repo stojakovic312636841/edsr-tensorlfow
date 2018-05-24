@@ -27,6 +27,7 @@ else:
 	print("No image argument given")
 inputs = x
 outputs = network.predict(x)
+#save the result image
 if args.image:
-	scipy.misc.imsave(args.outdir+"/input_"+args.image,inputs)
-	scipy.misc.imsave(args.outdir+"/output_"+args.image,outputs)
+	scipy.misc.imsave(args.outdir+"/input_"+'x'+str(args.scale)+'.jpg',inputs)
+	scipy.misc.imsave(args.outdir+"/output_"+'x'+str(args.scale)+'.jpg',outputs)

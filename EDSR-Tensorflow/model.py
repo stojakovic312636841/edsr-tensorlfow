@@ -205,6 +205,10 @@ class EDSR(object):
 		#Operation to initialize all variables
 		init = tf.global_variables_initializer()
 		print("Begin training...")
+
+		loss_max = 1e8
+		loss_init = 0
+
 		with self.sess as sess:
 			#Initialize all variables
 			sess.run(init)
@@ -235,14 +239,30 @@ class EDSR(object):
 				}
 				#Run the train op and calculate the train summary
 				summary,_ = sess.run([merged,train_op],feed)
+
 				#If we're testing, don't train on test set. But do calculate summary
-				if test_exists:
+				 
+				save_flag = False
+				if test_exists and (i+1)%(step_in_epoch/20) == 0:
 					t_summary = sess.run(merged,test_feed)
 					#Write test summary
 					test_writer.add_summary(t_summary,i)
+					loss_now = sess.run(self.loss,test_feed)
+					if loss_now < loss_max:
+						if (i+1-(step_in_epoch/20)) == 0:
+							loss_init = loss_now
+							print('loss_init = %f'%(loss_init))
+						loss_max = loss_now
+						print('the loss is lower and the value is %f'%(loss_now))
+						save_flag = True						
+					elif loss_now > loss_init * 20.0:
+						print('sys is stop\r\nthe loss is boom... and the value is %f'%(loss_now))
+						os._exit(0)
+
 				#Write train summary for this step
 				train_writer.add_summary(summary,i)
 				
 				#Save our trained model
-				if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
+				#if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
+				if save_flag == True:
 					self.save()		
