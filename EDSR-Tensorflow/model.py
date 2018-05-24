@@ -160,6 +160,9 @@ class EDSR(object):
 			self.saver = tf.train.Saver()
 			print("Done ONLY one GPU model building!")
 		else:
+
+
+
 			print("Building EDSR in mult GPU mode...")
 			gpu_num = check_available_gpus()
 			names = locals()
@@ -171,24 +174,25 @@ class EDSR(object):
 			total_loss = []	
 
 			#the batch set has been split
-			image_input = tf.split(image_input, int(gpu_num))
-			image_target = tf.split(image_target, int(gpu_num))
+			img_input = tf.split(image_input, int(gpu_num))
+			img_target = tf.split(image_target, int(gpu_num))
 
 			for gpu_id in range(int(gpu_num)):
 				with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
 				    with tf.variable_scope(tf.get_variable_scope(), reuse=(gpu_id > 0)):
 						print('device_index --> gpu%2d'%(gpu_id))
-						names['self.output_%d'%(gpu_id)] = output = EDSR_model(image_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+						names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
 						names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
-						names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(image_target[gpu_id],output))				        
+						names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))				        
 						total_loss.append(loss)
+						#print('total_loss shape:',total_loss)
 						
 			self.loss = tf.reduce_mean(tf.stack(total_loss, axis=0))
 
 			for gpu_id in range(int(gpu_num)):
 				#Calculating Peak Signal-to-noise-ratio
 				#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
-				mse = tf.reduce_mean(tf.squared_difference(image_target[gpu_id],names['self.output_%d'%(gpu_id)]))	
+				mse = tf.reduce_mean(tf.squared_difference(img_target[gpu_id],names['self.output_%d'%(gpu_id)]))	
 				PSNR = tf.constant(255**2,dtype=tf.float32)/mse
 				PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
 	
@@ -197,8 +201,8 @@ class EDSR(object):
 				tf.summary.scalar("PSNR_gpu %d"%(gpu_id),PSNR)
 
 				#Image summaries for input, target, and output
-				tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(image_input[gpu_id],tf.uint8))
-				tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(image_target[gpu_id],tf.uint8))
+				tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(img_input[gpu_id],tf.uint8))
+				tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(img_target[gpu_id],tf.uint8))
 				tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))
 			
 			#Scalar to keep track for loss
@@ -301,7 +305,7 @@ class EDSR(object):
 		optimizer = tf.train.AdamOptimizer()
 
 		#This is the train operation for our objective
-		train_op = optimizer.minimize(self.loss)
+		train_op = optimizer.minimize(self.loss, colocate_gradients_with_ops = True)
 		if self.mult_gpu == False:
 			print('the optimizer ONLY one GPU mode')
 		else:
@@ -352,10 +356,10 @@ class EDSR(object):
 				 
 				save_flag = False
 				if test_exists and (i+1)%(step_in_epoch/every_batch_test) == 0:
-					t_summary = sess.run(merged,test_feed)
+					t_summary,loss_now = sess.run([merged,self.loss],test_feed)
 					#Write test summary
 					test_writer.add_summary(t_summary,i)
-					loss_now = sess.run(self.loss,test_feed)
+					
 					if loss_now < loss_max:
 						if (i+1-(step_in_epoch/every_batch_test)) == 0:
 							loss_init = loss_now
