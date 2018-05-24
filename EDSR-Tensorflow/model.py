@@ -6,6 +6,48 @@ import numpy as np
 import shutil
 import utils
 import os
+from tensorflow.python.client import device_lib
+
+
+'''
+
+'''
+def check_available_gpus():
+    local_devices = device_lib.list_local_devices()
+    gpu_names = [x.name for x in local_devices if x.device_type == 'GPU']
+    gpu_num = len(gpu_names)
+
+    print('{0} GPUs are detected : {1}'.format(gpu_num, gpu_names))
+
+    return gpu_num
+
+
+'''
+Build the EDSR model in the mult GPU mode
+'''
+def EDSR_model(img=None, layers=1, feature=1, scale = 2, reuse=False):
+	scaling_factor = 0.1
+	
+	with tf.variable_scope('L1', reuse=reuse):
+		#One convolution before res blocks and to convert to required feature depth
+		x = slim.conv2d(img,feature,[3,3])
+		#Store the output of the first convolution to add later
+		conv_1 = x	
+
+	with tf.variable_scope('Resblock', reuse=reuse):
+		for i in range(layers):
+			x = utils.resBlock(x=x,channels=feature,scale=scaling_factor)	
+
+	with tf.variable_scope('Add', reuse=reuse):
+		#One more convolution, and then we add the output of our first conv layer
+		x = slim.conv2d(x,feature,[3,3])
+		x += conv_1
+
+	with tf.variable_scope('Upsample', reuse=reuse):
+		#Upsample output of the convolution		
+		x = utils.upsample(x,scale,feature,None)
+
+	return x
 
 """
 An implementation of the neural network used for
@@ -18,11 +60,11 @@ super-resolution of images as described in:
 """
 class EDSR(object):
 
-	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3):
-		print("Building EDSR...")
+	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, use_mult_gpu = False):
 		self.img_size = img_size
 		self.scale = scale
 		self.output_channels = output_channels
+		self.mult_gpu = use_mult_gpu
 
 		#Placeholder for image inputs
 		self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
@@ -39,82 +81,142 @@ class EDSR(object):
 		mean_y = 127#tf.reduce_mean(self.target)
 		image_target =y- mean_y
 
-		#One convolution before res blocks and to convert to required feature depth
-		x = slim.conv2d(image_input,feature_size,[3,3])
+		if self.mult_gpu == False:
+			print("Building EDSR in one GPU mode...")			
+
+			#One convolution before res blocks and to convert to required feature depth
+			x = slim.conv2d(image_input,feature_size,[3,3])
 	
-		#Store the output of the first convolution to add later
-		conv_1 = x	
+			#Store the output of the first convolution to add later
+			conv_1 = x	
 
-		"""
-		This creates `num_layers` number of resBlocks
-		a resBlock is defined in the paper as
-		(excuse the ugly ASCII graph)
-		x
-		|\
-		| \
-		|  conv2d
-		|  relu
-		|  conv2d
-		| /
-		|/
-		+ (addition here)
-		|
-		result
-		"""
+			"""
+			This creates `num_layers` number of resBlocks
+			a resBlock is defined in the paper as
+			(excuse the ugly ASCII graph)
+			x
+			|\
+			| \
+			|  conv2d
+			|  relu
+			|  conv2d
+			| /
+			|/
+			+ (addition here)
+			|
+			result
+			"""
 
-		"""
-		Doing scaling here as mentioned in the paper:
+			"""
+			Doing scaling here as mentioned in the paper:
 
-		`we found that increasing the number of feature
-		maps above a certain level would make the training procedure
-		numerically unstable. A similar phenomenon was
-		reported by Szegedy et al. We resolve this issue by
-		adopting the residual scaling with factor 0.1. In each
-		residual block, constant scaling layers are placed after the
-		last convolution layers. These modules stabilize the training
-		procedure greatly when using a large number of filters.
-		In the test phase, this layer can be integrated into the previous
-		convolution layer for the computational efficiency.'
+			`we found that increasing the number of feature
+			maps above a certain level would make the training procedure
+			numerically unstable. A similar phenomenon was
+			reported by Szegedy et al. We resolve this issue by
+			adopting the residual scaling with factor 0.1. In each
+			residual block, constant scaling layers are placed after the
+			last convolution layers. These modules stabilize the training
+			procedure greatly when using a large number of filters.
+			In the test phase, this layer can be integrated into the previous
+			convolution layer for the computational efficiency.'
 
-		"""
-		scaling_factor = 0.1
+			"""
+			scaling_factor = 0.1
 		
-		#Add the residual blocks to the model
-		for i in range(num_layers):
-			x = utils.resBlock(x,feature_size,scale=scaling_factor)
+			#Add the residual blocks to the model
+			for i in range(num_layers):
+				x = utils.resBlock(x,feature_size,scale=scaling_factor)
 
-		#One more convolution, and then we add the output of our first conv layer
-		x = slim.conv2d(x,feature_size,[3,3])
-		x += conv_1
+			#One more convolution, and then we add the output of our first conv layer
+			x = slim.conv2d(x,feature_size,[3,3])
+			x += conv_1
 		
-		#Upsample output of the convolution		
-		x = utils.upsample(x,scale,feature_size,None)
+			#Upsample output of the convolution		
+			x = utils.upsample(x,scale,feature_size,None)
 
-		#One final convolution on the upsampling output
-		output = x#slim.conv2d(x,output_channels,[3,3])
-		self.out = tf.clip_by_value(output+mean_x,0.0,255.0)
+			#One final convolution on the upsampling output
+			output = x#slim.conv2d(x,output_channels,[3,3])
+			self.out = tf.clip_by_value(output+mean_x,0.0,255.0)
 
-		self.loss = loss = tf.reduce_mean(tf.losses.absolute_difference(image_target,output))
+			self.loss = loss = tf.reduce_mean(tf.losses.absolute_difference(image_target,output))
 	
-		#Calculating Peak Signal-to-noise-ratio
-		#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
-		mse = tf.reduce_mean(tf.squared_difference(image_target,output))	
-		PSNR = tf.constant(255**2,dtype=tf.float32)/mse
-		PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
+			#Calculating Peak Signal-to-noise-ratio
+			#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
+			mse = tf.reduce_mean(tf.squared_difference(image_target,output))	
+			PSNR = tf.constant(255**2,dtype=tf.float32)/mse
+			PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
 	
-		#Scalar to keep track for loss
-		tf.summary.scalar("loss",self.loss)
-		tf.summary.scalar("PSNR",PSNR)
-		#Image summaries for input, target, and output
-		tf.summary.image("input_image",tf.cast(self.input,tf.uint8))
-		tf.summary.image("target_image",tf.cast(self.target,tf.uint8))
-		tf.summary.image("output_image",tf.cast(self.out,tf.uint8))
+			#Scalar to keep track for loss
+			tf.summary.scalar("loss",self.loss)
+			tf.summary.scalar("PSNR",PSNR)
+			#Image summaries for input, target, and output
+			tf.summary.image("input_image",tf.cast(self.input,tf.uint8))
+			tf.summary.image("target_image",tf.cast(self.target,tf.uint8))
+			tf.summary.image("output_image",tf.cast(self.out,tf.uint8))
 		
-		#Tensorflow graph setup... session, saver, etc.
-		self.sess = tf.Session()
-		self.saver = tf.train.Saver()
-		print("Done building!")
+			#Tensorflow graph setup... session, saver, etc.
+			self.sess = tf.Session()
+			self.saver = tf.train.Saver()
+			print("Done ONLY one GPU model building!")
+		else:
+			print("Building EDSR in mult GPU mode...")
+			gpu_num = check_available_gpus()
+			names = locals()
+
+			if gpu_num == 1:
+				print('error: only one gpu in PC, Can NOT use the mult GPU mode and sys exit')
+				os._exit(0)	
+			
+			total_loss = []	
+
+			#the batch set has been split
+			image_input = tf.split(image_input, int(gpu_num))
+			image_target = tf.split(image_target, int(gpu_num))
+
+			for gpu_id in range(int(gpu_num)):
+				with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
+				    with tf.variable_scope(tf.get_variable_scope(), reuse=(gpu_id > 0)):
+						print('device_index --> gpu%2d'%(gpu_id))
+						names['self.output_%d'%(gpu_id)] = output = EDSR_model(image_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+						names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+						names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(image_target[gpu_id],output))				        
+						total_loss.append(loss)
+						
+			self.loss = tf.reduce_mean(tf.stack(total_loss, axis=0))
+
+			for gpu_id in range(int(gpu_num)):
+				#Calculating Peak Signal-to-noise-ratio
+				#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
+				mse = tf.reduce_mean(tf.squared_difference(image_target[gpu_id],names['self.output_%d'%(gpu_id)]))	
+				PSNR = tf.constant(255**2,dtype=tf.float32)/mse
+				PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
 	
+				#Scalar to keep track for loss
+				tf.summary.scalar("loss_gpu %d"%(gpu_id),names['self.loss_%d'%(gpu_id)])
+				tf.summary.scalar("PSNR_gpu %d"%(gpu_id),PSNR)
+
+				#Image summaries for input, target, and output
+				tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(image_input[gpu_id],tf.uint8))
+				tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(image_target[gpu_id],tf.uint8))
+				tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))
+			
+			#Scalar to keep track for loss
+			tf.summary.scalar("total_loss",self.loss)
+			#Tensorflow graph setup... session, saver, etc.
+			self.sess = tf.Session()
+			self.saver = tf.train.Saver()
+			print("Done MULT GPU model building!")
+
+
+
+
+	
+
+
+
+
+
 	"""
 	Save the current state of the network to file
 	"""
@@ -200,7 +302,10 @@ class EDSR(object):
 
 		#This is the train operation for our objective
 		train_op = optimizer.minimize(self.loss)
-		print('the optimizer ONLY one GPU mode')	
+		if self.mult_gpu == False:
+			print('the optimizer ONLY one GPU mode')
+		else:
+			print('the optimizer MULT GPU mode')	
 			
 		#Operation to initialize all variables
 		init = tf.global_variables_initializer()
@@ -208,6 +313,9 @@ class EDSR(object):
 
 		loss_max = 1e8
 		loss_init = 0
+
+		every_batch_test = min(20,step_in_epoch)
+		error_scale = 20.0
 
 		with self.sess as sess:
 			#Initialize all variables
@@ -243,19 +351,19 @@ class EDSR(object):
 				#If we're testing, don't train on test set. But do calculate summary
 				 
 				save_flag = False
-				if test_exists and (i+1)%(step_in_epoch/20) == 0:
+				if test_exists and (i+1)%(step_in_epoch/every_batch_test) == 0:
 					t_summary = sess.run(merged,test_feed)
 					#Write test summary
 					test_writer.add_summary(t_summary,i)
 					loss_now = sess.run(self.loss,test_feed)
 					if loss_now < loss_max:
-						if (i+1-(step_in_epoch/20)) == 0:
+						if (i+1-(step_in_epoch/every_batch_test)) == 0:
 							loss_init = loss_now
 							print('loss_init = %f'%(loss_init))
 						loss_max = loss_now
 						print('the loss is lower and the value is %f'%(loss_now))
 						save_flag = True						
-					elif loss_now > loss_init * 20.0:
+					elif loss_now > loss_init * error_scale:
 						print('sys is stop\r\nthe loss is boom... and the value is %f'%(loss_now))
 						os._exit(0)
 

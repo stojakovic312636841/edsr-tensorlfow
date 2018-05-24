@@ -3,6 +3,8 @@ import scipy.misc
 import argparse
 import data
 import os
+import time
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset",default="data/General-100")
 parser.add_argument("--imgsize",default=100,type=int)
@@ -18,6 +20,9 @@ parser.add_argument("--image")
 args = parser.parse_args()
 if not os.path.exists(args.outdir):
 	os.mkdir(args.outdir)
+
+args.imgsize = args.imgsize - (args.imgsize % args.scale)
+
 down_size = args.imgsize//args.scale
 network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale)
 network.resume(args.savedir)
@@ -26,7 +31,10 @@ if args.image:
 else:
 	print("No image argument given")
 inputs = x
+start_time = time.time()
 outputs = network.predict(x)
+print('cost time  = %.5f'%(time.time() - start_time))
+
 #save the result image
 if args.image:
 	scipy.misc.imsave(args.outdir+"/input_"+'x'+str(args.scale)+'.jpg',inputs)
