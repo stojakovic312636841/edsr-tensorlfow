@@ -5,8 +5,9 @@ from tqdm import tqdm
 import numpy as np
 import shutil
 import utils
-import os
+import os, threading, time
 from tensorflow.python.client import device_lib
+import data
 
 
 '''
@@ -60,28 +61,30 @@ super-resolution of images as described in:
 """
 class EDSR(object):
 
-	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, use_mult_gpu = False,is_test = False):
+	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, batch_size=32, step_in_epo = 0 ,use_mult_gpu = False, is_test = False, use_queue = True):
 		self.img_size = img_size
 		self.scale = scale
 		self.output_channels = output_channels
 		self.mult_gpu = use_mult_gpu
-
-		#Placeholder for image inputs
-		self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
-		#Placeholder for upscaled image ground-truth
-		self.target = y = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
-	
-		"""
-		Preprocessing as mentioned in the paper, by subtracting the mean
-		However, the subtract the mean of the entire dataset they use. As of
-		now, I am subtracting the mean of each batch
-		"""
-		mean_x = 127#tf.reduce_mean(self.input)
-		image_input =x- mean_x
-		mean_y = 127#tf.reduce_mean(self.target)
-		image_target =y- mean_y
+		self.use_queue = use_queue
 
 		if self.mult_gpu == False:
+
+			#Placeholder for image inputs
+			self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
+			#Placeholder for upscaled image ground-truth
+			self.target = y = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
+	
+			"""
+			Preprocessing as mentioned in the paper, by subtracting the mean
+			However, the subtract the mean of the entire dataset they use. As of
+			now, I am subtracting the mean of each batch
+			"""
+			mean_x = 127#tf.reduce_mean(self.input)
+			image_input =x- mean_x
+			mean_y = 127#tf.reduce_mean(self.target)
+			image_target =y- mean_y
+
 			print("Building EDSR in one GPU mode...")			
 
 			#One convolution before res blocks and to convert to required feature depth
@@ -159,7 +162,35 @@ class EDSR(object):
 			self.sess = tf.Session()
 			self.saver = tf.train.Saver()
 			print("Done ONLY one GPU model building!")
+
+		###################################################################################
 		else:
+			if self.use_queue is not True:
+				#Placeholder for image inputs
+				self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
+				#Placeholder for upscaled image ground-truth
+				self.target = y = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
+			else:
+				self.input_single = tf.placeholder(tf.float32, [img_size,img_size,output_channels])
+				self.target_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])
+	
+				q = tf.FIFOQueue((step_in_epo * batch_size), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
+				self.enqueue_op = q.enqueue([self.input_single, self.target_single])
+				
+				self.input, self.target	= q.dequeue_many(batch_size)
+				x=self.input
+				y=self.target
+					
+				
+			"""
+			Preprocessing as mentioned in the paper, by subtracting the mean
+			However, the subtract the mean of the entire dataset they use. As of
+			now, I am subtracting the mean of each batch
+			"""
+			mean_x = 127#tf.reduce_mean(self.input)
+			image_input =x- mean_x
+			mean_y = 127#tf.reduce_mean(self.target)
+			image_target =y- mean_y
 
 			print("Building EDSR in mult GPU mode...")
 			gpu_num = check_available_gpus()
@@ -229,10 +260,45 @@ class EDSR(object):
 
 
 
-	
+
+	### WITH ASYNCHRONOUS DATA LOADING ###
+	def load_and_enqueue(self, coord, file_list, args, idx=0, num_thread=1):
+		count = 0;
+		length = len(file_list)
+		shrunk_size = args.imgsize//args.scale
+		try:
+			while not coord.should_stop():
+				i = count % length;
+				gt_img = data.get_image(file_list[i],args.imgsize)
+				input_img = scipy.misc.imresize(gt_img,(shrunk_size,shrunk_size))
+			
+				self.sess.run(self.enqueue_op, feed_dict={self.input_single:input_img, self.target_single:gt_img})
+				count+=1
+		except Exception as e:
+			print "stopping...", idx, e
 
 
+	#######################################	
+	def load_dataset_queue(self, _args):		
+		train_list, test_list = data.get_global_train_set()
+		threads = []
 
+		# create threads
+		num_thread = 12
+		coord = tf.train.Coordinator()
+		for i in range(num_thread):
+			length = len(train_list)//num_thread
+			t = threading.Thread(target=self.load_and_enqueue, args=(coord, train_list[i*length:(i+1)*length], _args, i, num_thread))
+			threads.append(t)
+			t.start()
+		print "num thread:" , len(threads)
+
+	"""
+	Function to setup your input data pipeline
+	"""
+	def set_test_data_fn(self,test_set_fn=None,test_set_args=None):
+		self.test_data = test_set_fn
+		self.test_args = test_set_args
 
 
 	"""
@@ -382,15 +448,20 @@ class EDSR(object):
 			#This is our training loop, the loop is the batch data.NOT epoch
 			print('total step is %d, and each epoch has %d step , epoch is %d'%(iterations*step_in_epoch, step_in_epoch, iterations))
 			for i in tqdm(range(iterations*step_in_epoch)):
-				#Use the data function we were passed to get a batch every iteration
-				x,y = self.data(*self.args)
-				#Create feed dictionary for the batch
-				feed = {
-					self.input:x,
-					self.target:y
-				}
-				#Run the train op and calculate the train summary
-				summary,_ = sess.run([merged,train_op],feed)
+
+				if self.mult_gpu is not True:
+					#Use the data function we were passed to get a batch every iteration
+					x,y = self.data(*self.args)
+					#Create feed dictionary for the batch
+					feed = {
+						self.input:x,
+						self.target:y
+					}
+					#Run the train op and calculate the train summary
+					summary,_ = sess.run([merged,train_op],feed)
+				else:					
+					summary,_ = sess.run([merged,train_op])
+					
 
 				#If we're testing, don't train on test set. But do calculate summary
 				 

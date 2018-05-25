@@ -1,5 +1,5 @@
 import scipy.misc
-import random
+import random, time, threading
 import numpy as np
 import os,time
 from PIL import Image
@@ -8,6 +8,10 @@ train_set = []
 test_set = []
 batch_index = 0
 epoch_index = 0
+
+
+
+
 
 
 
@@ -83,18 +87,10 @@ def load_dataset(data_dir, img_size,batch_size):
 			out = np.asarray(out)			
 			image_arugment(out, img_size, imgs, data_dir, img)
 			
-			'''
-			tmp= scipy.misc.imread(data_dir+"/"+img)
-			x,y,z = tmp.shape
-			coords_x = x / img_size
-			coords_y = y/img_size
-			coords = [ (q,r) for q in range(coords_x) for r in range(coords_y) ]
-			for coord in coords:
-				imgs.append((data_dir+"/"+img,coord))
-			'''
 		except:
 			print "oops"
-	test_size = min(10,int( len(imgs)*0.2))
+
+	test_size = min(batch_size,int( len(imgs)*0.2))
 	random.shuffle(imgs)
 	test_set = imgs[:test_size]
 	train_set = imgs[test_size:]#[:200]
@@ -107,6 +103,11 @@ def load_dataset(data_dir, img_size,batch_size):
 	print('one epoch has %d iterations'%(one_epoch_step))
 
 	return one_epoch_step
+
+
+
+
+
 
 """
 Get test set from the loaded dataset
@@ -126,10 +127,13 @@ def get_test_set(original_size,shrunk_size):
 			y_imgs.append(img)
 			x_imgs.append(x_img)"""
 	imgs = test_set
-	get_image(imgs[0],original_size)
+
 	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size)) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
 	y = [get_image(q,original_size) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size] for q in imgs]
 	return x,y
+
+
+
 
 def get_image(imgtuple,size):
 	img = scipy.misc.imread(imgtuple[0])
@@ -162,12 +166,29 @@ def get_batch(batch_size,original_size,shrunk_size):
 			x_img = scipy.misc.imresize(img,(shrunk_size,shrunk_size))
 			x.append(x_img)
 			y.append(img)"""
+	
+	
+
 	max_counter = len(train_set)/batch_size
 	counter = batch_index % max_counter
 	window = [x for x in range(counter*batch_size,(counter+1)*batch_size)]
 	imgs = [train_set[q] for q in window]
+
+	start_time = time.time()
+	
+	x=[]
+	y=[]
+	for q in imgs:		
+		_y = get_image(q,original_size)
+		_x = scipy.misc.imresize(_y,(shrunk_size,shrunk_size))
+		x.append(_x)
+		y.append(_y)
+
+	'''
 	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size)) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
 	y = [get_image(q,original_size) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size] for q in imgs]
+	'''
+	#print('--half() cost time: %f'%(time.time() - start_time))	
 
 	#when run a epoch, the train_data has to be shuffled	
 	if batch_index == max_counter-1:
@@ -176,6 +197,9 @@ def get_batch(batch_size,original_size,shrunk_size):
 		print('train_set has been random shuffle, and epoch %d is start'%(epoch_index))
 
 	batch_index = (batch_index+1)%max_counter
+
+	
+
 	return x,y
 
 """
@@ -198,4 +222,10 @@ def shuffle_train_set():
 	#print('train_set has been random shuffle')
 	random.shuffle(train_set)
 	return 
+
+
+def get_global_train_set():
+	global train_set
+	global test_set
+	return train_set, test_set
 
