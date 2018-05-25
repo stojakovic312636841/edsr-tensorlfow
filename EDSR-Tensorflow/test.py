@@ -17,6 +17,9 @@ parser.add_argument("--iterations",default=1000,type=int)
 parser.add_argument("--numimgs",default=5,type=int)
 parser.add_argument("--outdir",default="out")
 parser.add_argument("--image")
+parser.add_argument("--mult_gpu", action = 'store_true', help='the test use mult gpu')
+
+
 args = parser.parse_args()
 if not os.path.exists(args.outdir):
 	os.mkdir(args.outdir)
@@ -24,15 +27,19 @@ if not os.path.exists(args.outdir):
 args.imgsize = args.imgsize - (args.imgsize % args.scale)
 
 down_size = args.imgsize//args.scale
-network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale)
+network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale,use_mult_gpu = args.mult_gpu, is_test = args.mult_gpu)
 network.resume(args.savedir)
+
 if args.image:
 	x = scipy.misc.imread(args.image)
 else:
 	print("No image argument given")
+
+
 inputs = x
 start_time = time.time()
 outputs = network.predict(x)
+
 print('cost time  = %.5f'%(time.time() - start_time))
 
 #save the result image

@@ -60,7 +60,7 @@ super-resolution of images as described in:
 """
 class EDSR(object):
 
-	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, use_mult_gpu = False):
+	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, use_mult_gpu = False,is_test = False):
 		self.img_size = img_size
 		self.scale = scale
 		self.output_channels = output_channels
@@ -161,8 +161,6 @@ class EDSR(object):
 			print("Done ONLY one GPU model building!")
 		else:
 
-
-
 			print("Building EDSR in mult GPU mode...")
 			gpu_num = check_available_gpus()
 			names = locals()
@@ -174,39 +172,55 @@ class EDSR(object):
 			total_loss = []	
 
 			#the batch set has been split
-			img_input = tf.split(image_input, int(gpu_num))
-			img_target = tf.split(image_target, int(gpu_num))
+			if is_test == False:
+				img_input = tf.split(image_input, int(gpu_num))
+				img_target = tf.split(image_target, int(gpu_num))
+			else:
+				img_input = image_input
+				img_target = image_target
 
 			for gpu_id in range(int(gpu_num)):
 				with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
 				    with tf.variable_scope(tf.get_variable_scope(), reuse=(gpu_id > 0)):
 						print('device_index --> gpu%2d'%(gpu_id))
-						names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
-						names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
-						names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))				        
-						total_loss.append(loss)
-						#print('total_loss shape:',total_loss)
+						if is_test == False:
+							names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+							names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+							names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
+							total_loss.append(loss)	
+						else:
+							names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
+							names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+							#names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
+				        
 						
-			self.loss = tf.reduce_mean(tf.stack(total_loss, axis=0))
+						if gpu_id == 0:
+							self.out_0 = names['self.out_%d'%(gpu_id)]
+						if gpu_id == 1:
+							self.out_1 = names['self.out_%d'%(gpu_id)]
 
-			for gpu_id in range(int(gpu_num)):
-				#Calculating Peak Signal-to-noise-ratio
-				#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
-				mse = tf.reduce_mean(tf.squared_difference(img_target[gpu_id],names['self.output_%d'%(gpu_id)]))	
-				PSNR = tf.constant(255**2,dtype=tf.float32)/mse
-				PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
+			if is_test == False:			
+				self.loss = tf.reduce_mean(tf.stack(total_loss, axis=0))
+
+				for gpu_id in range(int(gpu_num)):
+					#Calculating Peak Signal-to-noise-ratio
+					#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
+					mse = tf.reduce_mean(tf.squared_difference(img_target[gpu_id],names['self.output_%d'%(gpu_id)]))	
+					PSNR = tf.constant(255**2,dtype=tf.float32)/mse
+					PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
 	
-				#Scalar to keep track for loss
-				tf.summary.scalar("loss_gpu %d"%(gpu_id),names['self.loss_%d'%(gpu_id)])
-				tf.summary.scalar("PSNR_gpu %d"%(gpu_id),PSNR)
+					#Scalar to keep track for loss
+					tf.summary.scalar("loss_gpu %d"%(gpu_id),names['self.loss_%d'%(gpu_id)])
+					tf.summary.scalar("PSNR_gpu %d"%(gpu_id),PSNR)
 
-				#Image summaries for input, target, and output
-				tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(img_input[gpu_id],tf.uint8))
-				tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(img_target[gpu_id],tf.uint8))
-				tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))
+					#Image summaries for input, target, and output
+					tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(img_input[gpu_id]+mean_x,tf.uint8))
+					tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(img_target[gpu_id]+mean_y,tf.uint8))
+					tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))
 			
-			#Scalar to keep track for loss
-			tf.summary.scalar("total_loss",self.loss)
+				#Scalar to keep track for loss
+				tf.summary.scalar("total_loss",self.loss)
+	
 			#Tensorflow graph setup... session, saver, etc.
 			self.sess = tf.Session()
 			self.saver = tf.train.Saver()
@@ -251,31 +265,53 @@ class EDSR(object):
 	return  	For the second case, we return a numpy array of shape [n,input_size*scale,input_size*scale,3]
 	"""
 	def predict(self,x):
-		print("Predicting...")
+		if self.mult_gpu == False:
+			print("ONLY one GPU Predicting...")
+		else:
+			print("Mult GPU Predicting...")
+
 		if (len(x.shape) == 3) and not(x.shape[0] == self.img_size and x.shape[1] == self.img_size):
 			num_across = x.shape[0]//self.img_size
 			num_down = x.shape[1]//self.img_size
 			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
+
 			for i in range(num_across):
 				for j in range(num_down):
-					tmp = self.sess.run(self.out,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})[0]
+					if self.mult_gpu == False:
+						tmp = self.sess.run(self.out,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})[0]
+					else:
+						tmp = self.sess.run(self.out_0,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})[0]
 					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+
 			#this added section fixes bottom right corner when testing
 			if (x.shape[0]%self.img_size != 0 and  x.shape[1]%self.img_size != 0):
-				tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]]})[0]
+				if self.mult_gpu == False:
+					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]]})[0]
+				else:
+					tmp = self.sess.run(self.out_0,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]]})[0]
 				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp
-					
+				
 			if x.shape[0]%self.img_size != 0:
 				for j in range(num_down):
-					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})[0]
+					if self.mult_gpu == False:
+						tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})[0]
+					else:
+						tmp = self.sess.run(self.out_0,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})[0]
 					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+
 			if x.shape[1]%self.img_size != 0:
 				for j in range(num_across):
-                                        tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
-                                        tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
+					if self.mult_gpu == False:
+						tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
+					else:
+						tmp = self.sess.run(self.out_0,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
+					tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
+			
 			return tmp_image
 		else:
 			return self.sess.run(self.out,feed_dict={self.input:x})
+
+
 
 	"""
 	Function to setup your input data pipeline
@@ -318,7 +354,11 @@ class EDSR(object):
 		loss_max = 1e8
 		loss_init = 0
 
-		every_batch_test = min(20,step_in_epoch)
+		if step_in_epoch > 1000:
+			every_batch_test = step_in_epoch/3
+		else:
+			every_batch_test = min(20,step_in_epoch)
+
 		error_scale = 20.0
 
 		with self.sess as sess:

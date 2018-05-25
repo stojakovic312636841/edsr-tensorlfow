@@ -22,6 +22,8 @@ print('start loading...')
 epoch_has_step = data.load_dataset(args.dataset, args.imgsize, args.batchsize)
 print('load dataset complit...')
 
+args.imgsize = args.imgsize - (args.imgsize % args.scale)
+
 down_size = args.imgsize//args.scale
 
 network = EDSR(down_size,args.layers,args.featuresize,args.scale, output_channels = 3,sc_factor = args.scaling_factor)
