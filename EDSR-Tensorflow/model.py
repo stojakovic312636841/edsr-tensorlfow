@@ -272,7 +272,7 @@ class EDSR(object):
 								names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							else:
-								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								#output image in tensorboard								
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							#names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
