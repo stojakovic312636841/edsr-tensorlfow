@@ -111,7 +111,7 @@ class EDSR(object):
 		
 		#One final convolution on the upsampling output
 		#output = x	#slim.conv2d(x,output_channels,[3,3])
-		output = image_bicubic + x
+		output = image_bicubic - x
 		self.out = tf.clip_by_value(output+mean_x,0.0,255.0)
 		#self.out = tf.clip_by_value(output+target_mean,0.0,255.0)
 
@@ -187,7 +187,7 @@ class EDSR(object):
 					bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]					
 
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]],self.bicubic:[bicubic]})[0]
-					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp + bicubic
+					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
 					#tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
 
 			#this added section fixes bottom right corner when testing
@@ -195,7 +195,7 @@ class EDSR(object):
 				bicubic = bic[-1*self.img_size *self.scale :,-1*self.img_size * self.scale:]
 
 				tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]],self.bicubic:[bicubic]})[0]
-				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp + bicubic					
+				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp					
 				#tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp
 					
 			if x.shape[0]%self.img_size != 0:
@@ -204,7 +204,7 @@ class EDSR(object):
 
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]],self.bicubic:[bicubic]})[0]
 					#tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
-					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp + bicubic
+					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
 
 			if x.shape[1]%self.img_size != 0:
 				for j in range(num_across):
@@ -212,7 +212,7 @@ class EDSR(object):
 
 					tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]],self.bicubic:[bicubic]})[0]
 					#tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
-					tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp + bicubic
+					tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
 			
 			return tmp_image
 		else:

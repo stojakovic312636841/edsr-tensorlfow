@@ -6,14 +6,14 @@ from model import EDSR
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset",default="data/General-100")
 parser.add_argument("--imgsize",default=100,type=int)
-parser.add_argument("--scale",default=2,type=int)
+parser.add_argument("--scale",default=4,type=int)
 parser.add_argument("--layers",default=32,type=int)
 parser.add_argument("--featuresize",default=256,type=int)
-parser.add_argument("--batchsize",default=16,type=int)  #10
+parser.add_argument("--batchsize",default=32,type=int)  #10
 parser.add_argument("--savedir",default='saved_models')
-parser.add_argument("--iterations",default=1000,type=int)
+parser.add_argument("--iterations",default=80,type=int)
 parser.add_argument("--lr",default=0.001,type=float)
-parser.add_argument("--scaling_factor",default=0.5, type=float)
+parser.add_argument("--scaling_factor",default=0.1, type=float)
 parser.add_argument("--load_model",default='',type=str)
 
 args = parser.parse_args()

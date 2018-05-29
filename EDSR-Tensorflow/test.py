@@ -27,7 +27,10 @@ if not os.path.exists(args.outdir):
 args.imgsize = args.imgsize - (args.imgsize % args.scale)
 
 down_size = args.imgsize//args.scale
-network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale,use_mult_gpu = args.mult_gpu, is_test = args.mult_gpu)
+
+
+network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale,use_mult_gpu = args.mult_gpu, is_test = args.mult_gpu, use_queue = False)
+
 network.resume(args.savedir)
 
 if args.image:
