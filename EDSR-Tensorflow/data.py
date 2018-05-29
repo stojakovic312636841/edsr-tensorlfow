@@ -3,6 +3,7 @@ import random, time, threading
 import numpy as np
 import os,time
 from PIL import Image
+import model
 
 train_set = []
 test_set = []
@@ -127,11 +128,43 @@ def get_test_set(original_size,shrunk_size):
 			y_imgs.append(img)
 			x_imgs.append(x_img)"""
 	imgs = test_set
+	
+	x = []
+	y = []
+	if model.get_use_my_model_flag() == True:
+	bicubic = []
 
+	for q in imgs:
+		_y = get_image(q,original_size)
+		_x = scipy.misc.imresize(_y,(shrunk_size,shrunk_size)
+		
+		x.append(_x)
+		y.append(_y)
+
+		if model.get_use_my_model_flag() == True:
+			_bic = scipy.misc.imresize(_x,(original_size,original_size))
+			bicubic.append(_bic)
+
+	if model.get_use_my_model_flag() == True:
+		return x,y,bicubic
+	else:
+		return x,y
+
+'''
 	x = [scipy.misc.imresize(get_image(q,original_size),(shrunk_size,shrunk_size)) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size].resize(shrunk_size,shrunk_size) for q in imgs]
 	y = [get_image(q,original_size) for q in imgs]#scipy.misc.imread(q[0])[q[1][0]*original_size:(q[1][0]+1)*original_size,q[1][1]*original_size:(q[1][1]+1)*original_size] for q in imgs]
-	return x,y
 
+	if model.get_use_my_model_flag() == True:
+		bicubic = []
+		for img in y:
+			temp =  scipy.misc.imresize(img,(shrunk_size,shrunk_size))
+			bic =  scipy.misc.imresize(temp,(original_size,original_size))
+			bicubic.append(bic)
+		
+		return x,y,bicubic
+	else:
+		return x,y
+'''
 
 
 

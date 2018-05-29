@@ -12,6 +12,12 @@ import data
 
 USE_MY_MODEL = True#False
 
+
+
+def get_use_my_model_flag():
+	return USE_MY_MODEL
+
+
 '''
 
 '''
@@ -71,7 +77,7 @@ class EDSR(object):
 		self.use_queue = use_queue
 
 		if USE_MY_MODEL is True:
-			print('USE MYSELF MYSELF MYSELF MYSELF MYSELF model')
+			print('USE MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF model')
 
 
 		if self.mult_gpu == False:
@@ -249,21 +255,26 @@ class EDSR(object):
 				    with tf.variable_scope(tf.get_variable_scope(), reuse=(gpu_id > 0)):
 						print('device_index --> gpu%2d'%(gpu_id))
 						#train
-						if is_test == False:
-							names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+						if is_test == False:							
 							if USE_MY_MODEL is not True:
+								names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							else:
-								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(mean_x+img_bicubic[gpu_id]-output,0.0,255.0)
+								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								#output image in tensorboard								
+								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+
 							names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
 							total_loss.append(loss)	
 						#test(SR)
-						else:
-							names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
+						else:							
 							if USE_MY_MODEL is not True:
+								names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							else:
-								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(mean_x+img_bicubic[gpu_id]-output,0.0,255.0)
+								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								#output image in tensorboard								
+								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							#names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
 				        
 						
@@ -288,8 +299,8 @@ class EDSR(object):
 
 					#Image summaries for input, target, and output
 					tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(img_input[gpu_id]+mean_x,tf.uint8))
-					tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(img_target[gpu_id]+mean_y,tf.uint8))
-					tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))
+					tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(img_target[gpu_id]+mean_y,tf.uint8))					
+					tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))					
 			
 				#Scalar to keep track for loss
 				tf.summary.scalar("total_loss",self.loss)
@@ -511,8 +522,12 @@ class EDSR(object):
 			#If we're using a test set, include another summary writer for that
 			if test_exists:
 				test_writer = tf.summary.FileWriter(save_dir+"/test",sess.graph)
-				test_x,test_y = self.test_data(*self.test_args)
-				test_feed = {self.input:test_x,self.target:test_y}
+				if USE_MY_MODEL is not True:
+					test_x,test_y = self.test_data(*self.test_args)
+					test_feed = {self.input:test_x,self.target:test_y}
+				else:
+					test_x,test_y,test_bic = self.test_data(*self.test_args)
+					test_feed = {self.input:test_x,self.target:test_y,self.bicubic:test_bic}
 
 			#This is our training loop, the loop is the batch data.NOT epoch
 			print('total step is %d, and each epoch has %d step , epoch is %d'%(iterations*step_in_epoch, step_in_epoch, iterations))
