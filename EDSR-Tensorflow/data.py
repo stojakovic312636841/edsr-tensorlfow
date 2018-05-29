@@ -132,11 +132,11 @@ def get_test_set(original_size,shrunk_size):
 	x = []
 	y = []
 	if model.get_use_my_model_flag() == True:
-	bicubic = []
+		bicubic = []
 
 	for q in imgs:
 		_y = get_image(q,original_size)
-		_x = scipy.misc.imresize(_y,(shrunk_size,shrunk_size)
+		_x = scipy.misc.imresize(_y,(shrunk_size,shrunk_size))
 		
 		x.append(_x)
 		y.append(_y)

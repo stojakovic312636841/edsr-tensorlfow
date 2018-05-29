@@ -477,10 +477,18 @@ class EDSR(object):
 			os._exit(0)
 
 		#Removing previous save directory if there is one
-		if os.path.exists(save_dir):
-			shutil.rmtree(save_dir)
-		#Make new save directory
-		os.mkdir(save_dir)
+		if pre_train_model == '':		
+			if os.path.exists(save_dir):
+				shutil.rmtree(save_dir)
+			#Make new save directory
+			os.mkdir(save_dir)
+			print('the model is new!')
+		else:
+			if os.path.exists(save_dir+'/test'):
+				shutil.rmtree(save_dir+'/test')
+				shutil.rmtree(save_dir+'/train')
+				print('old scalars has been delted and restore model is going on')
+
 		#Just a tf thing, to merge all summaries into one
 		merged = tf.summary.merge_all()
 		#Using adam optimizer as mentioned in the paper
