@@ -47,5 +47,5 @@ print('cost time  = %.5f'%(time.time() - start_time))
 
 #save the result image
 if args.image:
-	scipy.misc.imsave(args.outdir+"/input_"+'x'+str(args.scale)+'.jpg',inputs)
-	scipy.misc.imsave(args.outdir+"/output_"+'x'+str(args.scale)+'.jpg',outputs)
+	scipy.misc.imsave(args.outdir+"/input_"+'x'+str(args.scale)+'.png',inputs)
+	scipy.misc.imsave(args.outdir+"/output_"+'x'+str(args.scale)+'.png',outputs)

@@ -8,6 +8,8 @@ parser.add_argument("--scale",default=4,type=int)
 parser.add_argument("--layers",default=32,type=int)
 parser.add_argument("--featuresize",default=256,type=int)
 parser.add_argument("--batchsize",default=32,type=int)
+parser.add_argument("--lr",default=0.001,type=float)
+parser.add_argument("--factor_scale",default=0.1,type=float)
 parser.add_argument("--savedir",default='saved_models')
 parser.add_argument("--iterations",default=80,type=int)
 parser.add_argument("--load_model",default='',type=str)
@@ -33,6 +35,8 @@ network = EDSR( img_size = down_size,
 				scale = args.scale, 
 				output_channels = 3,
 				batch_size = args.batchsize, 
+				lr = args.lr,
+				factor_scale = args.factor_scale,
 				step_in_epo = each_epoch_step, 
 				use_mult_gpu = args.mult_gpu,
 				is_test = False,

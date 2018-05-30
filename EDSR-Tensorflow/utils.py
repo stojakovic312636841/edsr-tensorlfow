@@ -10,10 +10,10 @@ x: input to pass through the residual block
 channels: number of channels to compute
 stride: convolution stride
 """
-def resBlock(x,channels=64,kernel_size=[3,3],scale=1):
-	tmp = slim.conv2d(x,channels,kernel_size,activation_fn=None)
+def resBlock(x,channels=64,kernel_size=[3,3],scale=1,weights_regularizer=slim.l2_regularizer(0.0005)):
+	tmp = slim.conv2d(x,channels,kernel_size,activation_fn=None, weights_regularizer=weights_regularizer)
 	tmp = tf.nn.relu(tmp)
-	tmp = slim.conv2d(tmp,channels,kernel_size,activation_fn=None)
+	tmp = slim.conv2d(tmp,channels,kernel_size,activation_fn=None, weights_regularizer=weights_regularizer)
 	tmp *= scale
 	return x + tmp
 
@@ -27,23 +27,23 @@ scale: scale increase of upsample
 features: number of features to compute
 activation: activation function
 """
-def upsample(x,scale=2,features=64,activation=tf.nn.relu):
+def upsample(x,scale=2,features=64,activation=tf.nn.relu,weights_regularizer=slim.l2_regularizer(0.0005)):
 	assert scale in [2,3,4]
-	x = slim.conv2d(x,features,[3,3],activation_fn=activation)
+	x = slim.conv2d(x,features,[3,3],activation_fn=activation, weights_regularizer=weights_regularizer)
 	if scale == 2:
 		ps_features = 3*(scale**2)
-		x = slim.conv2d(x,ps_features,[3,3],activation_fn=activation)
+		x = slim.conv2d(x,ps_features,[3,3],activation_fn=activation, weights_regularizer=weights_regularizer)
 		#x = slim.conv2d_transpose(x,ps_features,6,stride=1,activation_fn=activation)
 		x = PS(x,2,color=True)
 	elif scale == 3:
 		ps_features =3*(scale**2)
-		x = slim.conv2d(x,ps_features,[3,3],activation_fn=activation)
+		x = slim.conv2d(x,ps_features,[3,3],activation_fn=activation, weights_regularizer=weights_regularizer)
 		#x = slim.conv2d_transpose(x,ps_features,9,stride=1,activation_fn=activation)
 		x = PS(x,3,color=True)
 	elif scale == 4:
 		ps_features = 3*(2**2)
 		for i in range(2):
-			x = slim.conv2d(x,ps_features,[3,3],activation_fn=activation)
+			x = slim.conv2d(x,ps_features,[3,3],activation_fn=activation, weights_regularizer=weights_regularizer)
 			#x = slim.conv2d_transpose(x,ps_features,6,stride=1,activation_fn=activation)
 			x = PS(x,2,color=True)
 	return x

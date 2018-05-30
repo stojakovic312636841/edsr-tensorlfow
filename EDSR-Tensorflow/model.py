@@ -31,32 +31,6 @@ def check_available_gpus():
     return gpu_num
 
 
-'''
-Build the EDSR model in the mult GPU mode
-'''
-def EDSR_model(img=None, layers=1, feature=1, scale = 2, reuse=False):
-	scaling_factor = 0.1
-	
-	with tf.variable_scope('L1', reuse=reuse):
-		#One convolution before res blocks and to convert to required feature depth
-		x = slim.conv2d(img,feature,[3,3])
-		#Store the output of the first convolution to add later
-		conv_1 = x	
-
-	with tf.variable_scope('Resblock', reuse=reuse):
-		for i in range(layers):
-			x = utils.resBlock(x=x,channels=feature,scale=scaling_factor)	
-
-	with tf.variable_scope('Add', reuse=reuse):
-		#One more convolution, and then we add the output of our first conv layer
-		x = slim.conv2d(x,feature,[3,3])
-		x += conv_1
-
-	with tf.variable_scope('Upsample', reuse=reuse):
-		#Upsample output of the convolution		
-		x = utils.upsample(x,scale,feature,None)
-
-	return x
 
 """
 An implementation of the neural network used for
@@ -68,13 +42,45 @@ super-resolution of images as described in:
 (single scale baseline-style model)
 """
 class EDSR(object):
+	'''
+	Build the EDSR model in the mult GPU mode
+	'''
+	def EDSR_model(self, img=None, layers=1, feature=1, scale = 2, reuse=False):
+		scaling_factor = self.factor_scale
+		print('scaling_factor = %f'%(scaling_factor))
 
-	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, batch_size=32, step_in_epo = 0 ,use_mult_gpu = False, is_test = False, use_queue = True):
+		with tf.variable_scope('L1', reuse=reuse):
+			#One convolution before res blocks and to convert to required feature depth
+			x = slim.conv2d(img,feature,[3,3],weights_regularizer=slim.l2_regularizer(0.0005))
+			#Store the output of the first convolution to add later
+			conv_1 = x	
+
+		with tf.variable_scope('Resblock', reuse=reuse):
+			for i in range(layers):
+				x = utils.resBlock(x=x,channels=feature,scale=scaling_factor, weights_regularizer=slim.l2_regularizer(0.0005))	
+
+		with tf.variable_scope('Add', reuse=reuse):
+			#One more convolution, and then we add the output of our first conv layer
+			x = slim.conv2d(x,feature,[3,3],weights_regularizer=slim.l2_regularizer(0.0005))
+			x += conv_1
+
+		with tf.variable_scope('Upsample', reuse=reuse):
+			#Upsample output of the convolution		
+			x = utils.upsample(x,scale,feature,None, weights_regularizer=slim.l2_regularizer(0.0005))
+
+		return x
+
+
+	##############################################################
+	def __init__(self,img_size=32,num_layers=32,feature_size=256,scale=2,output_channels=3, batch_size=32, lr = 0.001, factor_scale = 0.1, step_in_epo = 0 ,use_mult_gpu = False, is_test = False, use_queue = True):
+
 		self.img_size = img_size
 		self.scale = scale
 		self.output_channels = output_channels
 		self.mult_gpu = use_mult_gpu
 		self.use_queue = use_queue
+		self.lr = lr
+		self.factor_scale = factor_scale
 
 		if USE_MY_MODEL is True:
 			print('USE MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF model')
@@ -193,8 +199,10 @@ class EDSR(object):
 				if USE_MY_MODEL is True:
 					self.bicubic_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])				
 
+
 				if USE_MY_MODEL is not True:
-					q = tf.FIFOQueue((step_in_epo * batch_size), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
+					q = tf.RandomShuffleQueue((step_in_epo), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
+					#q = tf.FIFOQueue((step_in_epo ), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
 					self.enqueue_op = q.enqueue([self.input_single, self.target_single])
 				
 					self.input, self.target	= q.dequeue_many(batch_size)
@@ -202,7 +210,8 @@ class EDSR(object):
 					y=self.target
 
 				else:
-					q = tf.FIFOQueue((step_in_epo * batch_size), 
+					#FIFOQueue
+					q = tf.FIFOQueue((step_in_epo), 
 									[tf.float32, tf.float32, tf.float32], 
 									[[img_size,img_size,output_channels], 
 									[img_size*scale,img_size*scale,output_channels], 
@@ -257,10 +266,10 @@ class EDSR(object):
 						#train
 						if is_test == False:							
 							if USE_MY_MODEL is not True:
-								names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								names['self.output_%d'%(gpu_id)] = output = self.EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							else:
-								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - self.EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								#output image in tensorboard								
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 
@@ -269,10 +278,10 @@ class EDSR(object):
 						#test(SR)
 						else:							
 							if USE_MY_MODEL is not True:
-								names['self.output_%d'%(gpu_id)] = output = EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								names['self.output_%d'%(gpu_id)] = output = self.EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							else:
-								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
+								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - self.EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
 								#output image in tensorboard								
 								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
 							#names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
@@ -344,6 +353,7 @@ class EDSR(object):
 		# create threads
 		num_thread = 12
 		coord = tf.train.Coordinator()
+
 		for i in range(num_thread):
 			length = len(train_list)//num_thread
 			t = threading.Thread(target=self.load_and_enqueue, args=(coord, train_list[i*length:(i+1)*length], _args, i, num_thread))
@@ -491,11 +501,23 @@ class EDSR(object):
 
 		#Just a tf thing, to merge all summaries into one
 		merged = tf.summary.merge_all()
-		#Using adam optimizer as mentioned in the paper
-		optimizer = tf.train.AdamOptimizer()
 
-		#This is the train operation for our objective
-		train_op = optimizer.minimize(self.loss, colocate_gradients_with_ops = True)
+		#Using adam optimizer as mentioned in the paper
+		optimizer = tf.train.AdamOptimizer(self.lr)
+		if False:			
+			#This is the train operation for our objective
+			train_op = optimizer.minimize(self.loss, colocate_gradients_with_ops = True)	
+		else:
+			#use the grads clip
+			grads = optimizer.compute_gradients(self.loss, colocate_gradients_with_ops = True)
+			for i, (g,v) in enumerate(grads):
+				if g is not None:
+					grads[i] = (tf.clip_by_norm(g,5),v)
+			train_op = optimizer.apply_gradients(grads)
+
+		
+
+		#the mult_gpu info
 		if self.mult_gpu == False:
 			print('the optimizer ONLY one GPU mode')
 		else:
@@ -509,9 +531,11 @@ class EDSR(object):
 		loss_init = 0
 
 		if step_in_epoch > 1000:
-			every_batch_test = step_in_epoch/3
-		else:
+			every_batch_test = step_in_epoch/10
+		elif step_in_epoch > 100:
 			every_batch_test = min(20,step_in_epoch)
+		else:
+			every_batch_test = step_in_epoch /30 
 
 		error_scale = 20.0
 
@@ -555,8 +579,7 @@ class EDSR(object):
 					summary,_ = sess.run([merged,train_op])
 					
 
-				#If we're testing, don't train on test set. But do calculate summary
-				 
+				#If we're testing, don't train on test set. But do calculate summary				 
 				save_flag = False
 				if test_exists and (i+1)%(step_in_epoch/every_batch_test) == 0:
 					t_summary,loss_now = sess.run([merged,self.loss],test_feed)
@@ -570,13 +593,15 @@ class EDSR(object):
 						loss_max = loss_now
 						print('the loss is lower and the value is %f'%(loss_now))
 						save_flag = True						
-					elif loss_now > loss_init * error_scale:
+					elif loss_now > loss_init * error_scale or loss_now > 3.0 * loss_max:
 						print('sys is stop\r\nthe loss is boom... and the value is %f'%(loss_now))
 						os._exit(0)
+					else:
+						save_flag = False
 
 				#Write train summary for this step
 				train_writer.add_summary(summary,i)
-				
+
 				#Save our trained model
 				#if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
 				if save_flag == True:
