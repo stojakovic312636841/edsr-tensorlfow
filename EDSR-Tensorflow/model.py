@@ -5,12 +5,12 @@ from tqdm import tqdm
 import numpy as np
 import shutil
 import utils
-import os, threading, time
+import os, threading, time,random
 from tensorflow.python.client import device_lib
 import data
 
 
-USE_MY_MODEL = True#False
+USE_MY_MODEL = False#False
 
 
 
@@ -81,6 +81,8 @@ class EDSR(object):
 		self.use_queue = use_queue
 		self.lr = lr
 		self.factor_scale = factor_scale
+		self.step_in_epo = step_in_epo
+		self.batch_size = batch_size
 
 		if USE_MY_MODEL is True:
 			print('USE MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF model')
@@ -200,12 +202,11 @@ class EDSR(object):
 					self.bicubic_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])				
 
 
-				if USE_MY_MODEL is not True:
-					q = tf.RandomShuffleQueue((step_in_epo), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
-					#q = tf.FIFOQueue((step_in_epo ), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
+				if USE_MY_MODEL is not True:					
+					q = tf.FIFOQueue((step_in_epo ), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
 					self.enqueue_op = q.enqueue([self.input_single, self.target_single])
 				
-					self.input, self.target	= q.dequeue_many(batch_size)
+					self.input, self.target	= q.dequeue_many(self.batch_size)
 					x=self.input
 					y=self.target
 
@@ -218,7 +219,7 @@ class EDSR(object):
 									[img_size*scale,img_size*scale,output_channels]])
 					self.enqueue_op = q.enqueue([self.input_single, self.target_single, self.bicubic_single])
 					
-					self.input, self.target, self.bicubic = q.dequeue_many(batch_size)
+					self.input, self.target, self.bicubic = q.dequeue_many(self.batch_size)
 					x=self.input
 					y=self.target
 					bicubic = self.bicubic
@@ -353,6 +354,7 @@ class EDSR(object):
 		# create threads
 		num_thread = 12
 		coord = tf.train.Coordinator()
+		self.coord = coord
 
 		for i in range(num_thread):
 			length = len(train_list)//num_thread
@@ -498,37 +500,44 @@ class EDSR(object):
 				shutil.rmtree(save_dir+'/test')
 				shutil.rmtree(save_dir+'/train')
 				print('old scalars has been delted and restore model is going on')
-
-		#Just a tf thing, to merge all summaries into one
-		merged = tf.summary.merge_all()
+		
+		#the lr is change
+		global_step = tf.Variable(0, trainable=False)
+		starter_learning_rate = self.lr
+		print('the strater learning rate is %f'%(starter_learning_rate))
+		learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,(self.step_in_epo * 1), 0.96, staircase=True)#
+		#tf.summary.scalar("learning rate", learning_rate)
+		#tf.summary.scalar("global_step", global_step)
 
 		#Using adam optimizer as mentioned in the paper
-		optimizer = tf.train.AdamOptimizer(self.lr)
-		if False:			
+		optimizer = tf.train.AdamOptimizer(learning_rate)
+		if True:			
 			#This is the train operation for our objective
-			train_op = optimizer.minimize(self.loss, colocate_gradients_with_ops = True)	
+			train_op = optimizer.minimize(self.loss, global_step = global_step, colocate_gradients_with_ops = True)	
 		else:
 			#use the grads clip
 			grads = optimizer.compute_gradients(self.loss, colocate_gradients_with_ops = True)
 			for i, (g,v) in enumerate(grads):
 				if g is not None:
 					grads[i] = (tf.clip_by_norm(g,5),v)
-			train_op = optimizer.apply_gradients(grads)
-
-		
+			train_op = optimizer.apply_gradients(grads, global_step=global_step)		
 
 		#the mult_gpu info
 		if self.mult_gpu == False:
 			print('the optimizer ONLY one GPU mode')
 		else:
 			print('the optimizer MULT GPU mode')	
-			
+	
+		#Just a tf thing, to merge all summaries into one
+		merged = tf.summary.merge_all()
+		
 		#Operation to initialize all variables
 		init = tf.global_variables_initializer()
 		print("Begin training...")
 
 		loss_max = 1e8
 		loss_init = 0
+		lr_before = starter_learning_rate
 
 		if step_in_epoch > 1000:
 			every_batch_test = step_in_epoch/10
@@ -574,10 +583,13 @@ class EDSR(object):
 						self.target:y
 					}
 					#Run the train op and calculate the train summary
-					summary,_ = sess.run([merged,train_op],feed)
+					summary,_,lr_now,_ = sess.run([merged,train_op, learning_rate, global_step],feed)
 				else:					
-					summary,_ = sess.run([merged,train_op])
-					
+					summary,_,lr_now,_ = sess.run([merged,train_op, learning_rate, global_step])
+
+				if lr_now != lr_before:
+					lr_before = lr_now
+					print('learning rate is change and the value is %.10f'%(lr_now))					
 
 				#If we're testing, don't train on test set. But do calculate summary				 
 				save_flag = False
@@ -605,4 +617,7 @@ class EDSR(object):
 				#Save our trained model
 				#if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
 				if save_flag == True:
-					self.save()		
+					self.save()	
+
+			#close the queue
+			self.coord.request_stop()	

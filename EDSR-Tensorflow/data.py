@@ -258,6 +258,7 @@ def shuffle_train_set():
 
 
 def get_global_train_set():
+	shuffle_train_set()
 	global train_set
 	global test_set
 	return train_set, test_set
