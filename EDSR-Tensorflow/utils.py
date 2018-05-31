@@ -27,7 +27,7 @@ scale: scale increase of upsample
 features: number of features to compute
 activation: activation function
 """
-def upsample(x,scale=2,features=64,activation=tf.nn.relu,weights_regularizer=slim.l2_regularizer(0.0005)):
+def upsample(x,scale=2,features=64,activation=None,weights_regularizer=slim.l2_regularizer(0.0005)):#tf.nn.relu
 	assert scale in [2,3,4]
 	x = slim.conv2d(x,features,[3,3],activation_fn=activation, weights_regularizer=weights_regularizer)
 	if scale == 2:

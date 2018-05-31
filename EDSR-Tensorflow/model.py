@@ -51,7 +51,7 @@ class EDSR(object):
 
 		with tf.variable_scope('L1', reuse=reuse):
 			#One convolution before res blocks and to convert to required feature depth
-			x = slim.conv2d(img,feature,[3,3],weights_regularizer=slim.l2_regularizer(0.0005))
+			x = slim.conv2d(img,feature,[3,3],weights_regularizer=slim.l2_regularizer(0.0005),activation_fn=None)
 			#Store the output of the first convolution to add later
 			conv_1 = x	
 
@@ -61,13 +61,13 @@ class EDSR(object):
 
 		with tf.variable_scope('Add', reuse=reuse):
 			#One more convolution, and then we add the output of our first conv layer
-			x = slim.conv2d(x,feature,[3,3],weights_regularizer=slim.l2_regularizer(0.0005))
+			x = slim.conv2d(x,feature,[3,3],weights_regularizer=slim.l2_regularizer(0.0005),activation_fn=None)
 			x += conv_1
 
 		with tf.variable_scope('Upsample', reuse=reuse):
 			#Upsample output of the convolution		
 			x = utils.upsample(x,scale,feature,None, weights_regularizer=slim.l2_regularizer(0.0005))
-
+			x = slim.conv2d(x,self.output_channels,[3,3],weights_regularizer=slim.l2_regularizer(0.0005),activation_fn=None)
 		return x
 
 
@@ -590,9 +590,15 @@ class EDSR(object):
 						self.target:y
 					}
 					#Run the train op and calculate the train summary
-					summary,_,lr_now,_ = sess.run([merged,train_op, learning_rate, global_step],feed)
-				else:					
-					summary,_,lr_now,_ = sess.run([merged,train_op, learning_rate, global_step])
+					if (i+1) % (step_in_epoch/every_batch_test) == 0:  #save the time
+						summary,_,lr_now,_ = sess.run([merged,train_op, learning_rate, global_step],feed)
+					else:
+						_,lr_now,_ = sess.run([train_op, learning_rate, global_step],feed)
+				else:	
+					if (i+1) % (step_in_epoch/every_batch_test) == 0:  #save the time				
+						summary,_,lr_now,_ = sess.run([merged,train_op, learning_rate, global_step])
+					else:
+						_,lr_now,_ = sess.run([train_op, learning_rate, global_step])
 
 				if lr_now != lr_before:
 					lr_before = lr_now
@@ -619,7 +625,8 @@ class EDSR(object):
 						save_flag = False
 
 				#Write train summary for this step
-				train_writer.add_summary(summary,i)
+				if (i+1) % (step_in_epoch/every_batch_test) == 0:  #save the memory
+					train_writer.add_summary(summary,i)
 
 				#Save our trained model
 				#if (i+1) % step_in_epoch == 0 or (i+1) % (step_in_epoch/5) == 0 :		
