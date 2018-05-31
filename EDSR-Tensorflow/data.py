@@ -91,7 +91,7 @@ def load_dataset(data_dir, img_size,batch_size):
 		except:
 			print "oops"
 
-	test_size = min(batch_size,int( len(imgs)*0.2))
+	test_size = min(batch_size*10,int( len(imgs)*0.2))
 	random.shuffle(imgs)
 	test_set = imgs[:test_size]
 	train_set = imgs[test_size:]#[:200]

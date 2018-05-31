@@ -405,6 +405,8 @@ class EDSR(object):
 			print("ONLY one GPU Predicting...")
 		else:
 			print("Mult GPU Predicting...")
+
+		print('W = %d ,H=%d'%(x.shape[0],x.shape[1]))
 			
 		if USE_MY_MODEL is True:
 			bic = scipy.misc.imresize(x,(x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
@@ -467,7 +469,12 @@ class EDSR(object):
 			
 			return tmp_image
 		else:
-			return self.sess.run(self.out,feed_dict={self.input:x})
+			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
+			tmp_image = self.sess.run(self.out_0,feed_dict={self.input:[x]})[0]
+			tmp_image = scipy.misc.imresize(tmp_image,(x.shape[0]*self.scale,x.shape[1]*self.scale,3))
+			return tmp_image
+			#return self.sess.run(self.out,feed_dict={self.input:x})
+			 
 
 
 

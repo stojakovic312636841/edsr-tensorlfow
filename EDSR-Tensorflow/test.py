@@ -4,6 +4,7 @@ import argparse
 import data
 import os
 import time
+from PIL import Image
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset",default="data/General-100")
@@ -11,8 +12,9 @@ parser.add_argument("--imgsize",default=100,type=int)
 parser.add_argument("--scale",default=4,type=int)
 parser.add_argument("--layers",default=32,type=int)
 parser.add_argument("--featuresize",default=256,type=int)
-parser.add_argument("--batchsize",default=10,type=int)
+parser.add_argument("--batchsize",default=1,type=int)
 parser.add_argument("--savedir",default="saved_models")
+parser.add_argument("--load_model",default=".")
 parser.add_argument("--iterations",default=1000,type=int)
 parser.add_argument("--numimgs",default=5,type=int)
 parser.add_argument("--outdir",default="out")
@@ -24,6 +26,14 @@ args = parser.parse_args()
 if not os.path.exists(args.outdir):
 	os.mkdir(args.outdir)
 
+
+if args.image:
+	x = scipy.misc.imread(args.image)
+else:
+	print("No image argument given")
+
+args.imgsize = min(x.shape[0],x.shape[1]) * args.scale
+
 args.imgsize = args.imgsize - (args.imgsize % args.scale)
 
 down_size = args.imgsize//args.scale
@@ -31,13 +41,10 @@ down_size = args.imgsize//args.scale
 
 network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale,use_mult_gpu = args.mult_gpu, is_test = args.mult_gpu, use_queue = False)
 
-network.resume(args.savedir)
-
-if args.image:
-	x = scipy.misc.imread(args.image)
-else:
-	print("No image argument given")
-
+if args.load_model == '.':
+	print('the model path is error')
+	os._exit(0)
+network.resume(args.load_model)
 
 inputs = x
 start_time = time.time()
