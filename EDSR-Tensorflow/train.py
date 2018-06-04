@@ -1,4 +1,5 @@
 import data
+import os
 import argparse
 from model import EDSR
 parser = argparse.ArgumentParser()
@@ -21,12 +22,11 @@ USE_QUEUE_LOADING = False
 if args.mult_gpu == True:
 	USE_QUEUE_LOADING = True
 
-
-
 args.imgsize = args.imgsize - (args.imgsize % args.scale)
 print('start to load the train data...')
-each_epoch_step = data.load_dataset(args.dataset,args.imgsize,args.batchsize)		
-	
+
+each_epoch_step = data.load_dataset(args.dataset,args.imgsize,args.batchsize)
+
 down_size = args.imgsize//args.scale
 
 network = EDSR( img_size = down_size,

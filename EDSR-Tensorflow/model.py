@@ -620,6 +620,7 @@ class EDSR(object):
 						save_flag = True						
 					elif loss_now > loss_init * error_scale or loss_now > 3.0 * loss_max:
 						print('sys is stop\r\nthe loss is boom... and the value is %f'%(loss_now))
+						os.system('python train.py --mult_gpu --load_model saved_models --lr %f'%(starter_learning_rate/2.0))		
 						os._exit(0)
 					else:
 						save_flag = False
