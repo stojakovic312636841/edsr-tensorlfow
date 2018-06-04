@@ -470,7 +470,10 @@ class EDSR(object):
 			return tmp_image
 		else:
 			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
-			tmp_image = self.sess.run(self.out_0,feed_dict={self.input:[x]})[0]
+			if USE_MY_MODEL is not True:
+				tmp_image = self.sess.run(self.out_0,feed_dict={self.input:[x]})[0]
+			else:
+				tmp_image = self.sess.run(self.out_0,feed_dict={self.input:[x], self.bicubic:[bic]})[0]
 			tmp_image = scipy.misc.imresize(tmp_image,(x.shape[0]*self.scale,x.shape[1]*self.scale,3))
 			return tmp_image
 			#return self.sess.run(self.out,feed_dict={self.input:x})

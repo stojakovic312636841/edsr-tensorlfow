@@ -26,6 +26,10 @@ args = parser.parse_args()
 if not os.path.exists(args.outdir):
 	os.mkdir(args.outdir)
 
+name = os.path.basename(args.image)
+name,_ = os.path.splitext(name);  
+
+
 
 if args.image:
 	x = scipy.misc.imread(args.image)
@@ -55,4 +59,5 @@ print('cost time  = %.5f'%(time.time() - start_time))
 #save the result image
 if args.image:
 	scipy.misc.imsave(args.outdir+"/input_"+'x'+str(args.scale)+'.png',inputs)
-	scipy.misc.imsave(args.outdir+"/output_"+'x'+str(args.scale)+'.png',outputs)
+	scipy.misc.imsave(args.outdir+'/'+name+'x'+str(args.scale)+'.png',outputs)
+
