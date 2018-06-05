@@ -1,4 +1,4 @@
-from model import EDSR
+from movie_model import EDSR
 import scipy.misc
 import argparse
 import data
@@ -49,7 +49,7 @@ if args.video:
 	mv.get_short_movie()
 	img_list = mv.get_img_list()
 
-	#
+	#down sample
 	mv.down_sample()
 
 else:
@@ -59,40 +59,51 @@ else:
 
 
 t_strat_time = time.time()
-flag = True
+
+image_list = []
 for img in img_list:	
 	name_f,ep = os.path.splitext(img)
 	print(name_f)
 	x = scipy.misc.imread(args.outdir+'/'+img)	
+	image_list.append(x)
 
 	args.imgsize = min(x.shape[0],x.shape[1]) * args.scale
 	args.imgsize = args.imgsize - (args.imgsize % args.scale)
 	down_size = args.imgsize//args.scale
-	
+
+network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale,use_mult_gpu = args.mult_gpu, is_test = args.mult_gpu, use_queue = False)
+
+if args.load_model == '.':
+	print('the model path is error')
+	os._exit(0)
+
+#resume
+network.resume(args.load_model)
+
+start_time = time.time()
+outputs = network.movie_predict(image_list)
+
+print('cost time  = %.5f'%(time.time() - start_time))
 
 
-	if flag:
-		network = EDSR(down_size,args.layers,args.featuresize,scale=args.scale,use_mult_gpu = args.mult_gpu, is_test = args.mult_gpu, use_queue = False)
+#
+for filename in os.listdir(args.outdir):
+	if filename.endswith('.png') is True:
+		mv.del_img(filename)
 
-		if args.load_model == '.':
-			print('the model path is error')
-			os._exit(0)
-		network.resume(args.load_model)
+i=0
+for x in outputs:	
+	scipy.misc.imsave(args.outdir+'/'+'%05d'%(i)+'.png',x)
+	i=i+1
+	print('%d has saved'%(i))
 
-		flag = False
-
-	inputs = x
-	start_time = time.time()
-	outputs = network.predict(x)
-
-	print('cost time  = %.5f'%(time.time() - start_time))
-
-	#save the result image
-	mv.del_img(img)
-	scipy.misc.imsave(args.outdir+'/'+name_f+'.png',outputs)
 
 
 #put the image into movie
 mv.make_movie()
-print('total cost time  = %.5f'%(time.time() - t_strat_time))
 
+for filename in os.listdir(args.outdir):
+	if filename.endswith('.png') :
+		mv.del_img(filename)
+
+print('total cost time  = %.5f'%(time.time() - t_strat_time))

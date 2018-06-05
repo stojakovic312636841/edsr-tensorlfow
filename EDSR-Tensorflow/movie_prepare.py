@@ -22,7 +22,7 @@ class Movie_prepare(object):
 		print('To prepare the movie')
 
 	def get_short_movie(self):		
-		os.system('ffmpeg -i %s -r %d -ss %s -t %s %s/%%03d.png'
+		os.system('ffmpeg -i %s -r %d -ss %s -t %s %s/%%05d.png'
 					%(self.pare['mv_name'],
 						self.pare['rate'],
 						self.pare['ss'],
@@ -60,7 +60,7 @@ class Movie_prepare(object):
 
 	def make_movie(self):
 		name_f,ep = os.path.splitext(self.pare['mv_name'])
-		os.system('ffmpeg -r %d -i %s/%%03d.png -r %d -b %s %s/%s'
+		os.system('ffmpeg -r %d -i %s/%%05d.png -r %d -b %s %s/%s'
 					%(self.pare['rate'],
 					self.pare['outdir'],
 					self.pare['rate'],

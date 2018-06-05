@@ -89,231 +89,101 @@ class EDSR(object):
 			print('USE MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF MYSELF model')
 
 
-		if self.mult_gpu == False:
-
+		
+		if self.use_queue is not True:
 			#Placeholder for image inputs
-			self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
+			self.input1 = x1 = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
+			self.input2 = x2 = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
 			#Placeholder for upscaled image ground-truth
 			self.target = y = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
-	
-			"""
-			Preprocessing as mentioned in the paper, by subtracting the mean
-			However, the subtract the mean of the entire dataset they use. As of
-			now, I am subtracting the mean of each batch
-			"""
-			mean_x = 127#tf.reduce_mean(self.input)
-			image_input =x- mean_x
-			mean_y = 127#tf.reduce_mean(self.target)
-			image_target =y- mean_y
 
-			print("Building EDSR in one GPU mode...")			
+			if USE_MY_MODEL is True:
+				self.bicubic = bicubic = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
+				image_bicubic = bicubic - 127
 
-			#One convolution before res blocks and to convert to required feature depth
-			x = slim.conv2d(image_input,feature_size,[3,3])
-	
-			#Store the output of the first convolution to add later
-			conv_1 = x	
-
-			"""
-			This creates `num_layers` number of resBlocks
-			a resBlock is defined in the paper as
-			(excuse the ugly ASCII graph)
-			x
-			|\
-			| \
-			|  conv2d
-			|  relu
-			|  conv2d
-			| /
-			|/
-			+ (addition here)
-			|
-			result
-			"""
-
-			"""
-			Doing scaling here as mentioned in the paper:
-
-			`we found that increasing the number of feature
-			maps above a certain level would make the training procedure
-			numerically unstable. A similar phenomenon was
-			reported by Szegedy et al. We resolve this issue by
-			adopting the residual scaling with factor 0.1. In each
-			residual block, constant scaling layers are placed after the
-			last convolution layers. These modules stabilize the training
-			procedure greatly when using a large number of filters.
-			In the test phase, this layer can be integrated into the previous
-			convolution layer for the computational efficiency.'
-
-			"""
-			scaling_factor = 0.1
-		
-			#Add the residual blocks to the model
-			for i in range(num_layers):
-				x = utils.resBlock(x,feature_size,scale=scaling_factor)
-
-			#One more convolution, and then we add the output of our first conv layer
-			x = slim.conv2d(x,feature_size,[3,3])
-			x += conv_1
-		
-			#Upsample output of the convolution		
-			x = utils.upsample(x,scale,feature_size,None)
-
-			#One final convolution on the upsampling output
-			output = x#slim.conv2d(x,output_channels,[3,3])
-			self.out = tf.clip_by_value(output+mean_x,0.0,255.0)
-
-			self.loss = loss = tf.reduce_mean(tf.losses.absolute_difference(image_target,output))
-	
-			#Calculating Peak Signal-to-noise-ratio
-			#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
-			mse = tf.reduce_mean(tf.squared_difference(image_target,output))	
-			PSNR = tf.constant(255**2,dtype=tf.float32)/mse
-			PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
-	
-			#Scalar to keep track for loss
-			tf.summary.scalar("loss",self.loss)
-			tf.summary.scalar("PSNR",PSNR)
-			#Image summaries for input, target, and output
-			tf.summary.image("input_image",tf.cast(self.input,tf.uint8))
-			tf.summary.image("target_image",tf.cast(self.target,tf.uint8))
-			tf.summary.image("output_image",tf.cast(self.out,tf.uint8))
-		
-			#Tensorflow graph setup... session, saver, etc.
-			self.sess = tf.Session()
-			self.saver = tf.train.Saver()
-			print("Done ONLY one GPU model building!")
-
-		###################################################################################
 		else:
-			if self.use_queue is not True:
-				#Placeholder for image inputs
-				self.input = x = tf.placeholder(tf.float32,[None,img_size,img_size,output_channels])
-				#Placeholder for upscaled image ground-truth
-				self.target = y = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
+			self.input_single = tf.placeholder(tf.float32, [img_size,img_size,output_channels])
+			self.target_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])
+			if USE_MY_MODEL is True:
+				self.bicubic_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])				
 
-				if USE_MY_MODEL is True:
-					self.bicubic = bicubic = tf.placeholder(tf.float32,[None,img_size*scale,img_size*scale,output_channels])
-					image_bicubic = bicubic - 127
+
+			if USE_MY_MODEL is not True:					
+				q = tf.FIFOQueue((step_in_epo ), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
+				self.enqueue_op = q.enqueue([self.input_single, self.target_single])
+			
+				self.input, self.target	= q.dequeue_many(self.batch_size)
+				x=self.input
+				y=self.target
 
 			else:
-				self.input_single = tf.placeholder(tf.float32, [img_size,img_size,output_channels])
-				self.target_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])
-				if USE_MY_MODEL is True:
-					self.bicubic_single = tf.placeholder(tf.float32, [img_size*scale,img_size*scale,output_channels])				
-
-
-				if USE_MY_MODEL is not True:					
-					q = tf.FIFOQueue((step_in_epo ), [tf.float32, tf.float32], [[img_size,img_size,output_channels], [img_size*scale,img_size*scale,output_channels]])
-					self.enqueue_op = q.enqueue([self.input_single, self.target_single])
+				#FIFOQueue
+				q = tf.FIFOQueue((step_in_epo), 
+								[tf.float32, tf.float32, tf.float32], 
+								[[img_size,img_size,output_channels], 
+								[img_size*scale,img_size*scale,output_channels], 
+								[img_size*scale,img_size*scale,output_channels]])
+				self.enqueue_op = q.enqueue([self.input_single, self.target_single, self.bicubic_single])
 				
-					self.input, self.target	= q.dequeue_many(self.batch_size)
-					x=self.input
-					y=self.target
-
-				else:
-					#FIFOQueue
-					q = tf.FIFOQueue((step_in_epo), 
-									[tf.float32, tf.float32, tf.float32], 
-									[[img_size,img_size,output_channels], 
-									[img_size*scale,img_size*scale,output_channels], 
-									[img_size*scale,img_size*scale,output_channels]])
-					self.enqueue_op = q.enqueue([self.input_single, self.target_single, self.bicubic_single])
-					
-					self.input, self.target, self.bicubic = q.dequeue_many(self.batch_size)
-					x=self.input
-					y=self.target
-					bicubic = self.bicubic
-					image_bicubic = bicubic - 127
-					
-					
+				self.input, self.target, self.bicubic = q.dequeue_many(self.batch_size)
+				x=self.input
+				y=self.target
+				bicubic = self.bicubic
+				image_bicubic = bicubic - 127
 				
-			"""
-			Preprocessing as mentioned in the paper, by subtracting the mean
-			However, the subtract the mean of the entire dataset they use. As of
-			now, I am subtracting the mean of each batch
-			"""
-			mean_x = 127#tf.reduce_mean(self.input)
-			image_input =x- mean_x
-			mean_y = 127#tf.reduce_mean(self.target)
-			image_target =y- mean_y
-
-			print("Building EDSR in mult GPU mode...")
-			gpu_num = check_available_gpus()
-			names = globals()
-
-			if gpu_num == 1:
-				print('error: only one gpu in PC, Can NOT use the mult GPU mode and sys exit')
-				os._exit(0)	
+				
 			
-			total_loss = []	
+		"""
+		Preprocessing as mentioned in the paper, by subtracting the mean
+		However, the subtract the mean of the entire dataset they use. As of
+		now, I am subtracting the mean of each batch
+		"""
+		mean_x = 127#tf.reduce_mean(self.input)
+		image_input_0 =x1- mean_x
+		image_input_1 =x2- mean_x
+		mean_y = 127#tf.reduce_mean(self.target)
+		image_target =y- mean_y
 
-			#the batch set has been split
-			if is_test == False:
-				img_input = tf.split(image_input, int(gpu_num))
-				img_target = tf.split(image_target, int(gpu_num))
-				if USE_MY_MODEL is True:
-					img_bicubic = tf.split(image_bicubic, int(gpu_num))
-			else:
-				img_input = image_input
-				img_target = image_target
+		print("Building EDSR in mult GPU mode...")
+		gpu_num = check_available_gpus()
+		names = globals()
 
-				if USE_MY_MODEL is True:
-					img_bicubic = image_bicubic
+		if gpu_num == 1:
+			print('error: only one gpu in PC, Can NOT use the mult GPU mode and sys exit')
+			os._exit(0)	
+		
+		total_loss = []	
 
-			for gpu_id in range(int(gpu_num)):
-				with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
-				    with tf.variable_scope(tf.get_variable_scope(), reuse=(gpu_id > 0)):
-						print('device_index --> gpu%2d'%(gpu_id))
-						#train
-						if is_test == False:							
-							if USE_MY_MODEL is not True:
-								names['self.output_%d'%(gpu_id)] = output = self.EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
-								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
-							else:
-								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - self.EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
-								#output image in tensorboard								
-								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+		#the batch set has been split			
+		#img_input = tf.split(image_input, int(gpu_num))		
+		#img_target = tf.split(image_target, int(gpu_num))
 
-							names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
-							total_loss.append(loss)	
-						#test(SR)
-						else:							
-							if USE_MY_MODEL is not True:
-								names['self.output_%d'%(gpu_id)] = output = self.EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
-								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
-							else:
-								names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - self.EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
-								#output image in tensorboard								
-								names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
-							#names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
+		img_input = [None,None]
+		img_input[0] = image_input_0
+		img_input[1] = image_input_1
+		img_target = image_target
+		
+		if USE_MY_MODEL is True:
+			img_bicubic = tf.split(image_bicubic, int(gpu_num))
 
-			if is_test == False:			
-				self.loss = tf.reduce_mean(tf.stack(total_loss, axis=0))
 
-				for gpu_id in range(int(gpu_num)):
-					#Calculating Peak Signal-to-noise-ratio
-					#Using equations from here: https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio
-					mse = tf.reduce_mean(tf.squared_difference(img_target[gpu_id],names['self.output_%d'%(gpu_id)]))	
-					PSNR = tf.constant(255**2,dtype=tf.float32)/mse
-					PSNR = tf.constant(10,dtype=tf.float32)*utils.log10(PSNR)
-	
-					#Scalar to keep track for loss
-					tf.summary.scalar("loss_gpu %d"%(gpu_id),names['self.loss_%d'%(gpu_id)])
-					tf.summary.scalar("PSNR_gpu %d"%(gpu_id),PSNR)
+		for gpu_id in range(int(gpu_num)):
+			with tf.device(tf.DeviceSpec(device_type="GPU", device_index=gpu_id)):
+			    with tf.variable_scope(tf.get_variable_scope(), reuse=(gpu_id > 0)):
+					print('device_index --> gpu%2d'%(gpu_id))							
+					if USE_MY_MODEL is not True:
+						names['self.output_%d'%(gpu_id)] = output = self.EDSR_model(img_input[gpu_id], num_layers, feature_size, scale,reuse = (gpu_id > 0))
+						names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+					else:
+						names['self.output_%d'%(gpu_id)] = output = img_bicubic[gpu_id] - self.EDSR_model(img_input, num_layers, feature_size, scale,reuse = (gpu_id > 0))
+						#output image in tensorboard								
+						names['self.out_%d'%(gpu_id)] = tf.clip_by_value(output+mean_x,0.0,255.0)
+					#names['self.loss_%d'%(gpu_id)] = loss = tf.reduce_mean(tf.losses.absolute_difference(img_target[gpu_id],output))
 
-					#Image summaries for input, target, and output
-					tf.summary.image("input_image %d" %(gpu_id) ,tf.cast(img_input[gpu_id]+mean_x,tf.uint8))
-					tf.summary.image("target_image %d"%(gpu_id) ,tf.cast(img_target[gpu_id]+mean_y,tf.uint8))					
-					tf.summary.image("output_image %d"%(gpu_id) ,tf.cast(names['self.out_%d'%(gpu_id)],tf.uint8))					
-			
-				#Scalar to keep track for loss
-				tf.summary.scalar("total_loss",self.loss)
-	
-			#Tensorflow graph setup... session, saver, etc.
-			self.sess = tf.Session()
-			self.saver = tf.train.Saver()
-			print("Done MULT GPU model building!")
+		#Tensorflow graph setup... session, saver, etc.
+		self.sess = tf.Session()
+		self.saver = tf.train.Saver()
+		print("Done MULT GPU model building!")
 
 
 
@@ -395,23 +265,26 @@ class EDSR(object):
 
 	return  	For the second case, we return a numpy array of shape [n,input_size*scale,input_size*scale,3]
 	"""
-	def predict(self,x, gpu_id = 0):
+	def predict(self,x, y,gpu_id = 0):
 		names = globals()
+		'''
 		if self.mult_gpu == False:
 			print("ONLY one GPU Predicting...")
 		else:
 			print("Mult GPU Predicting...")
 
 		print('W = %d ,H=%d'%(x.shape[0],x.shape[1]))
-			
+		'''
+
 		if USE_MY_MODEL is True:
 			bic = scipy.misc.imresize(x,(x.shape[0]*self.scale,x.shape[1]*self.scale),'bicubic')
 
 		if (len(x.shape) == 3) and not(x.shape[0] == self.img_size and x.shape[1] == self.img_size):
 			num_across = x.shape[0]//self.img_size
 			num_down = x.shape[1]//self.img_size
-			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
-
+			tmp_image1 = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
+			tmp_image2 = np.zeros([y.shape[0]*self.scale,y.shape[1]*self.scale,3])
+			
 			for i in range(num_across):
 				for j in range(num_down):				
 					if self.mult_gpu == False:
@@ -421,9 +294,13 @@ class EDSR(object):
 							bicubic = bic[i*self.img_size*self.scale:(i+1)*self.img_size*self.scale,j*self.img_size*self.scale:(j+1)*self.img_size*self.scale]	
 							tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]], self.bicubic:[bicubic]})[0]
 						else:
-							tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})[0]
-					tmp_image[i*tmp.shape[0]:(i+1)*tmp.shape[0],j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+							tmp1,tmp2 = self.sess.run([names['self.out_0'],names['self.out_1']],feed_dict={self.input1:[x[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]],self.input2:[y[i*self.img_size:(i+1)*self.img_size,j*self.img_size:(j+1)*self.img_size]]})
 
+					tmp1 = tmp1[0]
+					tmp2 = tmp2[0]
+					tmp_image1[i*tmp1.shape[0]:(i+1)*tmp1.shape[0],j*tmp1.shape[1]:(j+1)*tmp1.shape[1]] = tmp1		
+					tmp_image2[i*tmp2.shape[0]:(i+1)*tmp2.shape[0],j*tmp2.shape[1]:(j+1)*tmp2.shape[1]] = tmp2
+			
 			#this added section fixes bottom right corner when testing
 			if (x.shape[0]%self.img_size != 0 and  x.shape[1]%self.img_size != 0):
 				
@@ -434,9 +311,13 @@ class EDSR(object):
 						bicubic = bic[-1*self.img_size *self.scale :,-1*self.img_size * self.scale:]
 						tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]], self.bicubic:[bicubic]})[0]
 					else:
-						tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[-1*self.img_size:,-1*self.img_size:]]})[0]
-				tmp_image[-1*tmp.shape[0]:,-1*tmp.shape[1]:] = tmp
+						tmp1,tmp2 = self.sess.run([names['self.out_0'],names['self.out_1']],feed_dict={self.input1:[x[-1*self.img_size:,-1*self.img_size:]],self.input2:[y[-1*self.img_size:,-1*self.img_size:]]})
+				tmp1 = tmp1[0]
+				tmp2 = tmp2[0]
+				tmp_image1[-1*tmp1.shape[0]:,-1*tmp1.shape[1]:] = tmp1
+				tmp_image2[-1*tmp2.shape[0]:,-1*tmp2.shape[1]:] = tmp1
 				
+			#
 			if x.shape[0]%self.img_size != 0:
 				for j in range(num_down):
 					if self.mult_gpu == False:
@@ -446,13 +327,17 @@ class EDSR(object):
 							bicubic = bic[-1*self.img_size * self.scale:,j*self.img_size * self.scale:(j+1)*self.img_size * self.scale]
 							tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]], self.bicubic:[bicubic]})[0]
 						else:
-							tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})[0]
-					tmp_image[-1*tmp.shape[0]:,j*tmp.shape[1]:(j+1)*tmp.shape[1]] = tmp
+							tmp1,tmp2 = self.sess.run([names['self.out_0'],names['self.out_1']],feed_dict={self.input1:[x[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]],self.input2:[y[-1*self.img_size:,j*self.img_size:(j+1)*self.img_size]]})
+					tmp1 = tmp1[0]
+					tmp2 = tmp2[0]
+					tmp_image1[-1*tmp1.shape[0]:,j*tmp1.shape[1]:(j+1)*tmp1.shape[1]] = tmp1
+					tmp_image2[-1*tmp2.shape[0]:,j*tmp2.shape[1]:(j+1)*tmp2.shape[1]] = tmp2
 
+
+
+			#
 			if x.shape[1]%self.img_size != 0:
 				for j in range(num_across):
-					
-
 					if self.mult_gpu == False:
 						tmp = self.sess.run(self.out,feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
 					else:
@@ -460,25 +345,33 @@ class EDSR(object):
 							bicubic = bic[j*self.img_size * self.scale:(j+1)*self.img_size * self.scale,-1*self.img_size * self.scale:]
 							tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]], self.bicubic:[bicubic]})[0]
 						else:
-							tmp = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})[0]
-					tmp_image[j*tmp.shape[0]:(j+1)*tmp.shape[0],-1*tmp.shape[1]:] = tmp
-			
-			return tmp_image
+							tmp1,tmp2 = self.sess.run([names['self.out_0'],names['self.out_1']],feed_dict={self.input1:[x[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]],self.input2:[y[j*self.img_size:(j+1)*self.img_size,-1*self.img_size:]]})
+					tmp1 = tmp1[0]
+					tmp2 = tmp2[0]
+					tmp_image1[j*tmp1.shape[0]:(j+1)*tmp1.shape[0],-1*tmp1.shape[1]:] = tmp1
+					tmp_image2[j*tmp2.shape[0]:(j+1)*tmp2.shape[0],-1*tmp2.shape[1]:] = tmp2
+					
+			return tmp_image1,tmp_image2
 		else:
-			tmp_image = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
+			tmp_image1 = np.zeros([x.shape[0]*self.scale,x.shape[1]*self.scale,3])
+			tmp_image2 = np.zeros([y.shape[0]*self.scale,y.shape[1]*self.scale,3])
+
 			if USE_MY_MODEL is not True:
-				tmp_image = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x]})[0]
+				tmp_image1,tmp_image2 = self.sess.run([names['self.out_0'],names['self.out_1']],feed_dict={self.input1:[x],self.input2:[y]})
 			else:
 				tmp_image = self.sess.run(names['self.out_%d'%(gpu_id)],feed_dict={self.input:[x], self.bicubic:[bic]})[0]
-			tmp_image = scipy.misc.imresize(tmp_image,(x.shape[0]*self.scale,x.shape[1]*self.scale,3))
-			return tmp_image
-			#return self.sess.run(self.out,feed_dict={self.input:x})
+
+			tmp_image1 = scipy.misc.imresize(tmp_image1[0],(x.shape[0]*self.scale,x.shape[1]*self.scale,3))
+			tmp_image2 = scipy.misc.imresize(tmp_image2[0],(y.shape[0]*self.scale,y.shape[1]*self.scale,3))
+			return tmp_image1,tmp_image2
+
 			 
 
 	'''
 	'''
 	def movie_predict(self,x_):
 		names = globals()
+		result_list = []
 
 		if self.gpu_num > 1:
 			print('mult GPU to SR the movie')
@@ -488,18 +381,14 @@ class EDSR(object):
 		else:
 			print('only one Gpu to work')
 
-		# split into gpu_num-list
-		for gpu_id in range(int(self.gpu_num)):
-			names['input_x_%d'%(gpu_id)] = []
-			for k in range(0,len(x_),self.gpu_num):
-				names['input_x_%d'%(gpu_id)].append(x_[k+gpu_id])
-		i=0
-		#for gpu_id in range(int(self.gpu_num)):
-		for x in names['input_x_%d'%(gpu_id)]:
-			im = self.predict(x,0)
-			im1 = self.predict(x,1)
-			i=i+1
-			print(i)
+		for i in range(0,int(len(x_)),self.gpu_num):
+			tmp1,tmp2 = self.predict(x_[i],x_[i+1])
+			result_list.append(tmp1)
+			result_list.append(tmp2)
+			print(i,tmp1.shape,tmp2.shape)
+		print(len(result_list))
+		return result_list
+
 
 
 						
